@@ -1,0 +1,7 @@
+.env
+
+.venv/
+
+AIGIBench_models/
+
+__pycache__/

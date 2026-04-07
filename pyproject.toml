@@ -1,0 +1,26 @@
+[project]
+name = "aigibench"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "clip",
+    "datasets>=4.8.4",
+    "einops>=0.8.2",
+    "kornia>=0.8.2",
+    "numpy>=2.4.4",
+    "open-clip-torch>=3.3.0",
+    "pillow>=12.2.0",
+    "python-dotenv>=1.2.2",
+    "pytorch-wavelet>=1.2",
+    "pytorch-wavelets",
+    "scikit-learn>=1.8.0",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+    "tqdm>=4.67.3",
+]
+
+[tool.uv.sources]
+clip = { git = "https://github.com/openai/CLIP.git" }
+pytorch-wavelets = { git = "https://github.com/fbcotter/pytorch_wavelets.git" }
