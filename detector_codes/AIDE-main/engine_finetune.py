@@ -1,28 +1,31 @@
-import os
 import math
 from typing import Iterable, Optional
 
 import torch
-from timm.data import Mixup
-from timm.utils import accuracy, ModelEma
-
 import utils
-from utils import adjust_learning_rate
 from scipy.special import softmax
-from sklearn.metrics import (
-    average_precision_score,
-    accuracy_score
-)
-import numpy as np
+from sklearn.metrics import accuracy_score, average_precision_score
+from timm.data import Mixup
+from timm.utils import ModelEma, accuracy
+from utils import adjust_learning_rate
 
 
-def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
-                    data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
-                    model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
-                    log_writer=None, args=None):
+def train_one_epoch(
+    model: torch.nn.Module,
+    criterion: torch.nn.Module,
+    data_loader: Iterable,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    epoch: int,
+    loss_scaler,
+    max_norm: float = 0,
+    model_ema: Optional[ModelEma] = None,
+    mixup_fn: Optional[Mixup] = None,
+    log_writer=None,
+    args=None,
+):
     model.train(True)
-    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger = utils.MetricLogger(delimiter='  ')
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 100
@@ -31,10 +34,14 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     use_amp = args.use_amp
     optimizer.zero_grad()
 
-    for data_iter_step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, (samples, targets) in enumerate(
+        metric_logger.log_every(data_loader, print_freq, header)
+    ):
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % update_freq == 0:
-            adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
+            adjust_learning_rate(
+                optimizer, data_iter_step / len(data_loader) + epoch, args
+            )
 
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
@@ -53,16 +60,23 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):
-            print("Loss is {}, stopping training".format(loss_value))
+            print('Loss is {}, stopping training'.format(loss_value))
             assert math.isfinite(loss_value)
 
         if use_amp:
             # this attribute is added by timm on one optimizer (adahessian)
-            is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
+            is_second_order = (
+                hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
+            )
             loss /= update_freq
-            grad_norm = loss_scaler(loss, optimizer, clip_grad=max_norm,
-                                    parameters=model.parameters(), create_graph=is_second_order,
-                                    update_grad=(data_iter_step + 1) % update_freq == 0)
+            grad_norm = loss_scaler(
+                loss,
+                optimizer,
+                clip_grad=max_norm,
+                parameters=model.parameters(),
+                create_graph=is_second_order,
+                update_grad=(data_iter_step + 1) % update_freq == 0,
+            )
             if (data_iter_step + 1) % update_freq == 0:
                 optimizer.zero_grad()
                 if model_ema is not None:
@@ -85,32 +99,32 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         metric_logger.update(loss=loss_value)
         metric_logger.update(class_acc=class_acc)
-        min_lr = 10.
-        max_lr = 0.
+        min_lr = 10.0
+        max_lr = 0.0
         for group in optimizer.param_groups:
-            min_lr = min(min_lr, group["lr"])
-            max_lr = max(max_lr, group["lr"])
+            min_lr = min(min_lr, group['lr'])
+            max_lr = max(max_lr, group['lr'])
 
         metric_logger.update(lr=max_lr)
         metric_logger.update(min_lr=min_lr)
         weight_decay_value = None
         for group in optimizer.param_groups:
-            if group["weight_decay"] > 0:
-                weight_decay_value = group["weight_decay"]
+            if group['weight_decay'] > 0:
+                weight_decay_value = group['weight_decay']
         metric_logger.update(weight_decay=weight_decay_value)
         if use_amp:
             metric_logger.update(grad_norm=grad_norm)
         if log_writer is not None:
-            log_writer.update(loss=loss_value, head="loss")
-            log_writer.update(class_acc=class_acc, head="loss")
-            log_writer.update(lr=max_lr, head="opt")
-            log_writer.update(min_lr=min_lr, head="opt")
-            log_writer.update(weight_decay=weight_decay_value, head="opt")
+            log_writer.update(loss=loss_value, head='loss')
+            log_writer.update(class_acc=class_acc, head='loss')
+            log_writer.update(lr=max_lr, head='opt')
+            log_writer.update(min_lr=min_lr, head='opt')
+            log_writer.update(weight_decay=weight_decay_value, head='opt')
             if use_amp:
-                log_writer.update(grad_norm=grad_norm, head="opt")
+                log_writer.update(grad_norm=grad_norm, head='opt')
             log_writer.set_step()
 
-    print("Averaged stats:", metric_logger)
+    print('Averaged stats:', metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
@@ -118,7 +132,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 def evaluate(data_loader, model, device, use_amp=False):
     criterion = torch.nn.CrossEntropyLoss()
 
-    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger = utils.MetricLogger(delimiter='  ')
     header = 'Test:'
 
     # switch to evaluation mode
@@ -160,8 +174,11 @@ def evaluate(data_loader, model, device, use_amp=False):
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
 
-    print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
-          .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
+    print(
+        '* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'.format(
+            top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss
+        )
+    )
 
     # Concatenate predictions and labels
     predictions = torch.cat(predictions, dim=0)
@@ -176,4 +193,10 @@ def evaluate(data_loader, model, device, use_amp=False):
     f_acc = accuracy_score(y_true[y_true == 1], y_pred[y_true == 1] > 0.5)
     ap = average_precision_score(y_true, y_pred)
 
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}, acc, ap, r_acc, f_acc
+    return (
+        {k: meter.global_avg for k, meter in metric_logger.meters.items()},
+        acc,
+        ap,
+        r_acc,
+        f_acc,
+    )

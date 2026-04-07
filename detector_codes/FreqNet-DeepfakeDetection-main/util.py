@@ -1,7 +1,8 @@
-import sys
 import os
-import torch
+import sys
+
 import numpy as np
+import torch
 
 
 def mkdirs(paths):
@@ -19,8 +20,10 @@ def mkdir(path):
 
 def unnormalize(tens, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     # assume tensor of shape NxCxHxW
-    return tens * torch.Tensor(std)[None, :, None, None] + torch.Tensor(
-        mean)[None, :, None, None]
+    return (
+        tens * torch.Tensor(std)[None, :, None, None]
+        + torch.Tensor(mean)[None, :, None, None]
+    )
 
 
 # 重定向 sys.stdout 输出到一个指定的文件，同时保持在终端显示
@@ -28,21 +31,22 @@ class Logger(object):
     """Log stdout messages."""
 
     def __init__(self, outfile):
-        self.terminal = sys.stdout                      # 保存当前标准输出流
-        self.log = open(outfile, "a")                   # 打开指定的日志文件 outfile，以追加模式 (a) 打开
+        self.terminal = sys.stdout  # 保存当前标准输出流
+        self.log = open(outfile, 'a')  # 打开指定的日志文件 outfile，以追加模式 (a) 打开
         # 将标准输出流重定向到 Logger 实例，这样所有的 print 语句和标准输出内容都会通过 Logger 的 write 方法
         sys.stdout = self
 
     def write(self, message):
-        self.terminal.write(message)                    # 将消息写到终端（标准输出）
-        self.log.write(message)                         # 将消息写到日志文件
+        self.terminal.write(message)  # 将消息写到终端（标准输出）
+        self.log.write(message)  # 将消息写到日志文件
 
     def flush(self):
-        self.terminal.flush()                           # 刷新终端的输出缓冲区，确保所有输出都及时显示
-        
+        self.terminal.flush()  # 刷新终端的输出缓冲区，确保所有输出都及时显示
+
 
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience."""
+
     def __init__(self, patience=7, verbose=False, delta=0):
         """
         Args:
@@ -79,15 +83,17 @@ class EarlyStopping:
             self.counter = 0
 
     def save_checkpoint(self, val_loss, model):
-        '''Saves model when validation loss decrease.'''
+        """Saves model when validation loss decrease."""
         if self.verbose:
-            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+            print(
+                f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...'
+            )
         self.val_loss_min = val_loss
 
 
 def printSet(set_str):
     set_str = str(set_str)
     num = len(set_str)
-    print("="*num*3)
-    print(" "*num + set_str)
-    print("="*num*3)
+    print('=' * num * 3)
+    print(' ' * num + set_str)
+    print('=' * num * 3)

@@ -1,9 +1,8 @@
-import torch
 import numpy as np
+import torch
 from networks.resnet import resnet50
-from sklearn.metrics import average_precision_score, precision_recall_curve, accuracy_score
 from options.test_options import TestOptions
-from data import create_dataloader
+from sklearn.metrics import accuracy_score, average_precision_score
 
 
 def validate(model, data_loader):
@@ -17,8 +16,8 @@ def validate(model, data_loader):
             y_true.extend(label.flatten().tolist())
 
     y_true, y_pred = np.array(y_true), np.array(y_pred)
-    r_acc = accuracy_score(y_true[y_true==0], y_pred[y_true==0] > 0.5)
-    f_acc = accuracy_score(y_true[y_true==1], y_pred[y_true==1] > 0.5)
+    r_acc = accuracy_score(y_true[y_true == 0], y_pred[y_true == 0] > 0.5)
+    f_acc = accuracy_score(y_true[y_true == 1], y_pred[y_true == 1] > 0.5)
     acc = accuracy_score(y_true, y_pred > 0.5)
     ap = average_precision_score(y_true, y_pred)
     return acc, ap, r_acc, f_acc, y_true, y_pred
@@ -35,8 +34,8 @@ if __name__ == '__main__':
 
     acc, avg_precision, r_acc, f_acc, y_true, y_pred = validate(model, opt)
 
-    print("accuracy:", acc)
-    print("average precision:", avg_precision)
+    print('accuracy:', acc)
+    print('average precision:', avg_precision)
 
-    print("accuracy of real images:", r_acc)
-    print("accuracy of fake images:", f_acc)
+    print('accuracy of real images:', r_acc)
+    print('accuracy of fake images:', f_acc)

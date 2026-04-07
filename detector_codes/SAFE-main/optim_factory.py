@@ -7,23 +7,23 @@
 
 
 import torch
-from torch import optim as optim
-
 from timm.optim.adafactor import Adafactor
 from timm.optim.adahessian import Adahessian
 from timm.optim.adamp import AdamP
 from timm.optim.lookahead import Lookahead
+
 # from timm.optim.nadam import Nadam
 # from timm.optim.novograd import NovoGrad
 from timm.optim.nvnovograd import NvNovoGrad
+
 # from timm.optim.radam import RAdam
 from timm.optim.rmsprop_tf import RMSpropTF
 from timm.optim.sgdp import SGDP
-
-import json
+from torch import optim as optim
 
 try:
-    from apex.optimizers import FusedNovoGrad, FusedAdam, FusedLAMB, FusedSGD
+    from apex.optimizers import FusedAdam, FusedLAMB, FusedNovoGrad, FusedSGD
+
     has_apex = True
 except ImportError:
     has_apex = False
@@ -33,29 +33,29 @@ def get_num_layer_for_convnext_single(var_name, depths):
     """
     Each layer is assigned distinctive layer ids
     """
-    if var_name.startswith("downsample_layers"):
+    if var_name.startswith('downsample_layers'):
         stage_id = int(var_name.split('.')[1])
         layer_id = sum(depths[:stage_id]) + 1
         return layer_id
-    
-    elif var_name.startswith("stages"):
+
+    elif var_name.startswith('stages'):
         stage_id = int(var_name.split('.')[1])
         block_id = int(var_name.split('.')[2])
         layer_id = sum(depths[:stage_id]) + block_id + 1
         return layer_id
-    
+
     else:
         return sum(depths) + 1
 
 
 def get_num_layer_for_convnext(var_name):
     """
-    Divide [3, 3, 27, 3] layers into 12 groups; each group is three 
+    Divide [3, 3, 27, 3] layers into 12 groups; each group is three
     consecutive blocks, including possible neighboring downsample layers;
     adapted from https://github.com/microsoft/unilm/blob/master/beit/optim_factory.py
     """
     num_max_layer = 12
-    if var_name.startswith("downsample_layers"):
+    if var_name.startswith('downsample_layers'):
         stage_id = int(var_name.split('.')[1])
         if stage_id == 0:
             layer_id = 0
@@ -65,13 +65,13 @@ def get_num_layer_for_convnext(var_name):
             layer_id = 12
         return layer_id
 
-    elif var_name.startswith("stages"):
+    elif var_name.startswith('stages'):
         stage_id = int(var_name.split('.')[1])
         block_id = int(var_name.split('.')[2])
         if stage_id == 0 or stage_id == 1:
             layer_id = stage_id + 1
         elif stage_id == 2:
-            layer_id = 3 + block_id // 3 
+            layer_id = 3 + block_id // 3
         elif stage_id == 3:
             layer_id = 12
         return layer_id
@@ -80,7 +80,7 @@ def get_num_layer_for_convnext(var_name):
 
 
 class LayerDecayValueAssigner(object):
-    def __init__(self, values, depths=[3,3,27,3], layer_decay_type='single'):
+    def __init__(self, values, depths=[3, 3, 27, 3], layer_decay_type='single'):
         self.values = values
         self.depths = depths
         self.layer_decay_type = layer_decay_type
@@ -95,23 +95,30 @@ class LayerDecayValueAssigner(object):
             return get_num_layer_for_convnext(var_name)
 
 
-def get_parameter_groups(model, weight_decay=1e-5, skip_list=(), get_num_layer=None, get_layer_scale=None):
+def get_parameter_groups(
+    model, weight_decay=1e-5, skip_list=(), get_num_layer=None, get_layer_scale=None
+):
     parameter_group_names = {}
     parameter_group_vars = {}
 
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue  # frozen weights
-        if len(param.shape) == 1 or name.endswith(".bias") or name in skip_list or \
-            name.endswith(".gamma") or name.endswith(".beta"):
-            group_name = "no_decay"
-            this_weight_decay = 0.
+        if (
+            len(param.shape) == 1
+            or name.endswith('.bias')
+            or name in skip_list
+            or name.endswith('.gamma')
+            or name.endswith('.beta')
+        ):
+            group_name = 'no_decay'
+            this_weight_decay = 0.0
         else:
-            group_name = "decay"
+            group_name = 'decay'
             this_weight_decay = weight_decay
         if get_num_layer is not None:
             layer_id = get_num_layer(name)
-            group_name = "layer_%d_%s" % (layer_id, group_name)
+            group_name = 'layer_%d_%s' % (layer_id, group_name)
         else:
             layer_id = None
 
@@ -119,26 +126,33 @@ def get_parameter_groups(model, weight_decay=1e-5, skip_list=(), get_num_layer=N
             if get_layer_scale is not None:
                 scale = get_layer_scale(layer_id)
             else:
-                scale = 1.
+                scale = 1.0
 
             parameter_group_names[group_name] = {
-                "weight_decay": this_weight_decay,
-                "params": [],
-                "lr_scale": scale
+                'weight_decay': this_weight_decay,
+                'params': [],
+                'lr_scale': scale,
             }
             parameter_group_vars[group_name] = {
-                "weight_decay": this_weight_decay,
-                "params": [],
-                "lr_scale": scale
+                'weight_decay': this_weight_decay,
+                'params': [],
+                'lr_scale': scale,
             }
 
-        parameter_group_vars[group_name]["params"].append(param)
-        parameter_group_names[group_name]["params"].append(name)
+        parameter_group_vars[group_name]['params'].append(param)
+        parameter_group_names[group_name]['params'].append(name)
     # print("Param groups = %s" % json.dumps(parameter_group_names, indent=2))
     return list(parameter_group_vars.values())
 
 
-def create_optimizer(args, model, get_num_layer=None, get_layer_scale=None, filter_bias_and_bn=True, skip_list=None):
+def create_optimizer(
+    args,
+    model,
+    get_num_layer=None,
+    get_layer_scale=None,
+    filter_bias_and_bn=True,
+    skip_list=None,
+):
     opt_lower = args.opt.lower()
     weight_decay = args.weight_decay
     # if weight_decay and filter_bias_and_bn:
@@ -148,13 +162,17 @@ def create_optimizer(args, model, get_num_layer=None, get_layer_scale=None, filt
             skip = skip_list
         elif hasattr(model, 'no_weight_decay'):
             skip = model.no_weight_decay()
-        parameters = get_parameter_groups(model, weight_decay, skip, get_num_layer, get_layer_scale)
-        weight_decay = 0.
+        parameters = get_parameter_groups(
+            model, weight_decay, skip, get_num_layer, get_layer_scale
+        )
+        weight_decay = 0.0
     else:
         parameters = model.parameters()
 
     if 'fused' in opt_lower:
-        assert has_apex and torch.cuda.is_available(), 'APEX and CUDA required for fused optimizers'
+        assert has_apex and torch.cuda.is_available(), (
+            'APEX and CUDA required for fused optimizers'
+        )
 
     opt_args = dict(lr=args.lr, weight_decay=weight_decay)
     if hasattr(args, 'opt_eps') and args.opt_eps is not None:
@@ -166,10 +184,14 @@ def create_optimizer(args, model, get_num_layer=None, get_layer_scale=None, filt
     opt_lower = opt_split[-1]
     if opt_lower == 'sgd' or opt_lower == 'nesterov':
         opt_args.pop('eps', None)
-        optimizer = optim.SGD(parameters, momentum=args.momentum, nesterov=True, **opt_args)
+        optimizer = optim.SGD(
+            parameters, momentum=args.momentum, nesterov=True, **opt_args
+        )
     elif opt_lower == 'momentum':
         opt_args.pop('eps', None)
-        optimizer = optim.SGD(parameters, momentum=args.momentum, nesterov=False, **opt_args)
+        optimizer = optim.SGD(
+            parameters, momentum=args.momentum, nesterov=False, **opt_args
+        )
     elif opt_lower == 'adam':
         optimizer = optim.Adam(parameters, **opt_args)
     elif opt_lower == 'adamw':
@@ -191,7 +213,9 @@ def create_optimizer(args, model, get_num_layer=None, get_layer_scale=None, filt
     elif opt_lower == 'adahessian':
         optimizer = Adahessian(parameters, **opt_args)
     elif opt_lower == 'rmsprop':
-        optimizer = optim.RMSprop(parameters, alpha=0.9, momentum=args.momentum, **opt_args)
+        optimizer = optim.RMSprop(
+            parameters, alpha=0.9, momentum=args.momentum, **opt_args
+        )
     elif opt_lower == 'rmsproptf':
         optimizer = RMSpropTF(parameters, alpha=0.9, momentum=args.momentum, **opt_args)
     # elif opt_lower == 'novograd':
@@ -200,10 +224,14 @@ def create_optimizer(args, model, get_num_layer=None, get_layer_scale=None, filt
         optimizer = NvNovoGrad(parameters, **opt_args)
     elif opt_lower == 'fusedsgd':
         opt_args.pop('eps', None)
-        optimizer = FusedSGD(parameters, momentum=args.momentum, nesterov=True, **opt_args)
+        optimizer = FusedSGD(
+            parameters, momentum=args.momentum, nesterov=True, **opt_args
+        )
     elif opt_lower == 'fusedmomentum':
         opt_args.pop('eps', None)
-        optimizer = FusedSGD(parameters, momentum=args.momentum, nesterov=False, **opt_args)
+        optimizer = FusedSGD(
+            parameters, momentum=args.momentum, nesterov=False, **opt_args
+        )
     elif opt_lower == 'fusedadam':
         optimizer = FusedAdam(parameters, adam_w_mode=False, **opt_args)
     elif opt_lower == 'fusedadamw':
@@ -214,7 +242,7 @@ def create_optimizer(args, model, get_num_layer=None, get_layer_scale=None, filt
         opt_args.setdefault('betas', (0.95, 0.98))
         optimizer = FusedNovoGrad(parameters, **opt_args)
     else:
-        assert False and "Invalid optimizer"
+        assert False and 'Invalid optimizer'
 
     if len(opt_split) > 1:
         if opt_split[0] == 'lookahead':

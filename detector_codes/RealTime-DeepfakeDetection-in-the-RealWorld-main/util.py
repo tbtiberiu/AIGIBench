@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 import torch
 
 
@@ -18,10 +19,10 @@ def mkdir(path):
 
 def unnormalize(tens, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     # assume tensor of shape NxCxHxW
-    return tens * torch.Tensor(std)[None, :, None, None] + torch.Tensor(
-        mean)[None, :, None, None]
-
-
+    return (
+        tens * torch.Tensor(std)[None, :, None, None]
+        + torch.Tensor(mean)[None, :, None, None]
+    )
 
 
 class Logger(object):
@@ -29,7 +30,7 @@ class Logger(object):
 
     def __init__(self, outfile):
         self.terminal = sys.stdout
-        self.log = open(outfile, "a")
+        self.log = open(outfile, 'a')
         sys.stdout = self
 
     def write(self, message):

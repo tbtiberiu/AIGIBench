@@ -1,29 +1,25 @@
-import os, sys, pdb
-import csv
-import random
 import argparse
+import csv
 import datetime
-import numpy as np
-import time
 import json
+import os
+import random
+import time
 from pathlib import Path
 
-import torch
-from torchvision import transforms
-
+import numpy as np
 import timm
+import torch
+import utils
+from data.datasets import TrainDataset
+from engine_finetune import evaluate, train_one_epoch
+from models.resnet import resnet50
+from optim_factory import LayerDecayValueAssigner, create_optimizer
 from timm.data.mixup import Mixup
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.utils import ModelEma
-from optim_factory import create_optimizer, LayerDecayValueAssigner
-
-from models.resnet import resnet50
-from data.datasets import TrainDataset
-from engine_finetune import train_one_epoch, evaluate
-
-import utils
 from utils import NativeScalerWithGradNormCount as NativeScaler
-from utils import str2bool, remap_checkpoint_keys
+from utils import str2bool
 
 
 def get_args_parser():
@@ -310,7 +306,7 @@ def main(args):
 
     if args.eval:
         model.eval()
-        print(f"Eval only mode")
+        print("Eval only mode")
 
         ROOT = args.eval_data_path
         VAL_DICT = {

@@ -1,16 +1,17 @@
+import logging
 import os
+import random
 import sys
 import time
-import torch
-from tensorboardX import SummaryWriter
+
 import numpy as np
-from validate import validate
+import torch
 from data import create_dataloader
 from networks.trainer import Trainer
 from options.train_options import TrainOptions
+from tensorboardX import SummaryWriter
 from util import Logger
-import random
-import logging
+from validate import validate
 
 
 def seed_torch(seed=1029):
@@ -46,8 +47,8 @@ if __name__ == '__main__':
     data_loader = create_dataloader(opt)
     val_loader = create_dataloader(val_opt)
 
-    train_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "train"))
-    val_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, "val"))
+    train_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, 'train'))
+    val_writer = SummaryWriter(os.path.join(opt.checkpoints_dir, opt.name, 'val'))
 
     model = Trainer(opt)
     model.train()
@@ -55,17 +56,23 @@ if __name__ == '__main__':
     # early_stopping = EarlyStopping(patience=opt.earlystop_epoch, delta=-0.001, verbose=True)
 
     # Configure logger
-    logging.basicConfig(level=logging.INFO,  # Set logging level
-                        format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
-                        datefmt='%Y-%m-%d %H:%M:%S',  # Date format without milliseconds
-                        handlers=[logging.FileHandler('log.log', mode='w'),  # Log file output
-                                  logging.StreamHandler()])  # Console output
+    logging.basicConfig(
+        level=logging.INFO,  # Set logging level
+        format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
+        datefmt='%Y-%m-%d %H:%M:%S',  # Date format without milliseconds
+        handlers=[
+            logging.FileHandler('log.log', mode='w'),  # Log file output
+            logging.StreamHandler(),
+        ],
+    )  # Console output
 
     logger = logging.getLogger(__name__)
 
     print(f'cwd: {os.getcwd()}')
-    print(f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} Length of data loader: {len(data_loader)}")
-    logger.info(f"Length of data loader: {len(data_loader)}")
+    print(
+        f'{time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())} Length of data loader: {len(data_loader)}'
+    )
+    logger.info(f'Length of data loader: {len(data_loader)}')
 
     for epoch in range(opt.niter):
         for i, data in enumerate(data_loader):
@@ -77,8 +84,12 @@ if __name__ == '__main__':
             model.optimize_parameters()
 
             if model.total_steps % opt.loss_freq == 0:
-                print(f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} Train loss: {model.loss} at step: {model.total_steps} lr {model.lr}")
-                logger.info(f"Train loss: {model.loss} at step: {model.total_steps} lr {model.lr}")
+                print(
+                    f'{time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())} Train loss: {model.loss} at step: {model.total_steps} lr {model.lr}'
+                )
+                logger.info(
+                    f'Train loss: {model.loss} at step: {model.total_steps} lr {model.lr}'
+                )
                 train_writer.add_scalar('loss', model.loss, model.total_steps)
 
         if epoch % opt.save_epoch_freq == 0 and epoch != 0:
@@ -87,8 +98,12 @@ if __name__ == '__main__':
             logger.info(f'saving the model at the end of epoch {epoch}')
             model.save_networks(epoch)
 
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} changing lr at the end of epoch {epoch}, iters {model.total_steps}")
-            logger.info(f"changing lr at the end of epoch {epoch}, iters {model.total_steps}")
+            print(
+                f'{time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())} changing lr at the end of epoch {epoch}, iters {model.total_steps}'
+            )
+            logger.info(
+                f'changing lr at the end of epoch {epoch}, iters {model.total_steps}'
+            )
             model.adjust_learning_rate()
 
         # Validation
@@ -96,8 +111,12 @@ if __name__ == '__main__':
         acc, ap, r_acc, f_acc = validate(model.model, val_loader)
         val_writer.add_scalar('accuracy', acc, model.total_steps)
         val_writer.add_scalar('ap', ap, model.total_steps)
-        print(f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} (Val @ epoch {epoch}) acc: {acc}; ap: {ap} r_acc: {r_acc}; f_acc: {f_acc}")
-        logger.info(f"(Val @ epoch {epoch}) acc: {acc}; ap: {ap} r_acc: {r_acc}; f_acc: {f_acc}")
+        print(
+            f'{time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())} (Val @ epoch {epoch}) acc: {acc}; ap: {ap} r_acc: {r_acc}; f_acc: {f_acc}'
+        )
+        logger.info(
+            f'(Val @ epoch {epoch}) acc: {acc}; ap: {ap} r_acc: {r_acc}; f_acc: {f_acc}'
+        )
 
         model.train()
 

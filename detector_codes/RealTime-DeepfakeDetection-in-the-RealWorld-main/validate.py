@@ -1,13 +1,16 @@
-import torch
 import numpy as np
-from networks.LaDeDa import LaDeDa9
-from networks.Tiny_LaDeDa import tiny_ladeda
-from sklearn.metrics import average_precision_score, precision_recall_curve, accuracy_score, roc_auc_score, precision_score, recall_score
+import torch
 from data import create_dataloader
-import torch.nn as nn
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+
 
 def validate(model, opt):
-    import time
     data_loader, _ = create_dataloader(opt)
     with torch.no_grad():
         y_true, y_pred = [], []
@@ -37,9 +40,7 @@ if __name__ == '__main__':
 
     acc, ap, r_acc, f_acc, auc, precision, recall = validate(model, opt)
 
-    print("accuracy:", acc)
-    print("average precision:", avg_precision)
-    print("accuracy of real images:", r_acc)
-    print("accuracy of fake images:", f_acc)
-
-
+    print('accuracy:', acc)
+    print('average precision:', avg_precision)
+    print('accuracy of real images:', r_acc)
+    print('accuracy of fake images:', f_acc)
