@@ -5,7 +5,6 @@ import sys
 
 import numpy as np
 import torch
-import torch.nn as nn
 from datasets import load_dataset
 from dotenv import load_dotenv
 from sklearn import metrics
@@ -113,6 +112,124 @@ class DetectorWrapper:
             return out.softmax(dim=1)[:, 1].flatten()
 
 
+class AIDE_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        sys.path.append('detector_codes/AIDE-main')
+        from data.dct import DCT_base_Rec_Module
+        from models.AIDE import AIDE
+
+        # AIDE expects resnet_path and convnext_path for preloading,
+        # but since we load the full state dict later, we can pass None.
+        self.model = AIDE(resnet_path=None, convnext_path=None)
+        self.dct = DCT_base_Rec_Module()
+        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+        # Handle SAFE/AIDE state dict naming if necessary
+        msg = self.model.load_state_dict(
+            state_dict['model'] if 'model' in state_dict else state_dict, strict=False
+        )
+        print(f'AIDE load message: {msg}')
+        self.model.to(DEVICE).eval()
+        self.dct.to(DEVICE)
+        # Transform should not include normalization because DCT is applied on raw ToTensor
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((256, 256)),
+                transforms.ToTensor(),
+            ]
+        )
+        self.normalize = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        )
+        self.resize = transforms.Resize((256, 256))
+
+    @torch.no_grad()
+    def detect(self, data):
+        # data is [B, 3, 256, 256] from 0 to 1
+        batch_stacked = []
+        for i in range(data.shape[0]):
+            img = data[i]
+            x_minmin, x_maxmax, x_minmin1, x_maxmax1 = self.dct(img)
+            # All must be 256x256
+            # Stack: [x_minmin, x_maxmax, x_minmin1, x_maxmax1, original]
+            # All need to be normalized
+            stacked = torch.stack(
+                [
+                    self.normalize(self.resize(x_minmin)),
+                    self.normalize(self.resize(x_maxmax)),
+                    self.normalize(self.resize(x_minmin1)),
+                    self.normalize(self.resize(x_maxmax1)),
+                    self.normalize(img),
+                ],
+                dim=0,
+            )
+            batch_stacked.append(stacked)
+
+        batch_data = torch.stack(batch_stacked, dim=0)  # [B, 5, 3, 256, 256]
+        out = self.model(batch_data)
+        # AIDE has 2 classes
+        return out.softmax(dim=1)[:, 1].flatten()
+
+
+class C2P_CLIP_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        sys.path.append('detector_codes/C2P-CLIP-DeepfakeDetection-main')
+        from networks.c2p_clip import C2P_CLIP_Model
+
+        self.model = C2P_CLIP_Model(name='openai/clip-vit-large-patch14', num_classes=1)
+        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+        if 'model' in state_dict:
+            state_dict = state_dict['model']
+
+        # Clean state dict by removing 'module.' prefix
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith('module.'):
+                new_state_dict[k[7:]] = v
+            else:
+                new_state_dict[k] = v
+
+        self.model.load_state_dict(new_state_dict, strict=False)
+        self.model.to(DEVICE).eval()
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=(0.48145466, 0.4578275, 0.40821073),
+                    std=(0.26862954, 0.26130258, 0.27577711),
+                ),
+            ]
+        )
+
+    def detect(self, img):
+        return self.model.detect(img)
+
+
+class CLIPDetection_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        sys.path.append('detector_codes/CLIPDetection-main')
+        # CLIPDetection uses openai-clip. We need to handle its specific architecture.
+        # This implementation assumes dependencies are installed.
+        from models.clip_models import CLIPModel
+
+        self.model = CLIPModel(name='ViT-L/14', num_classes=1)
+        self.model.load_state_dict(
+            torch.load(model_path, map_location='cpu', weights_only=False)
+        )
+        self.model.to(DEVICE).eval()
+        # CLIP standard normalization
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=(0.48145466, 0.4578275, 0.40821073),
+                    std=(0.26862954, 0.26130258, 0.27577711),
+                ),
+            ]
+        )
+
+
 class CNNDetection_Detector(DetectorWrapper):
     def __init__(self, model_path):
         sys.path.append('detector_codes/CNNDetection-master')
@@ -136,9 +253,9 @@ class CNNDetection_Detector(DetectorWrapper):
         )
 
 
-class NPR_Detector(DetectorWrapper):
+class DFFreq_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/NPR-DeepfakeDetection-main')
+        sys.path.append('detector_codes/DFFreq-main')
         from networks.resnet import resnet50
 
         self.model = resnet50(num_classes=1)
@@ -157,12 +274,12 @@ class NPR_Detector(DetectorWrapper):
         )
 
 
-class Resnet50_Detector(DetectorWrapper):
+class FreqNet_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/Resnet50-main')
-        from networks.resnet import resnet50
+        sys.path.append('detector_codes/FreqNet-DeepfakeDetection-main')
+        from networks.freqnet import FreqNet
 
-        self.model = resnet50(num_classes=1)
+        self.model = FreqNet(num_classes=1)
         self.model.load_state_dict(
             torch.load(model_path, map_location='cpu', weights_only=False)
         )
@@ -224,62 +341,68 @@ class LGrad_Detector(DetectorWrapper):
         )
 
 
-class AIDE_Detector(DetectorWrapper):
+class NPR_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/AIDE-main')
-        from data.dct import DCT_base_Rec_Module
-        from models.AIDE import AIDE
+        sys.path.append('detector_codes/NPR-DeepfakeDetection-main')
+        from networks.resnet import resnet50
 
-        # AIDE expects resnet_path and convnext_path for preloading,
-        # but since we load the full state dict later, we can pass None.
-        self.model = AIDE(resnet_path=None, convnext_path=None)
-        self.dct = DCT_base_Rec_Module()
-        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
-        # Handle SAFE/AIDE state dict naming if necessary
-        msg = self.model.load_state_dict(
-            state_dict['model'] if 'model' in state_dict else state_dict, strict=False
+        self.model = resnet50(num_classes=1)
+        self.model.load_state_dict(
+            torch.load(model_path, map_location='cpu', weights_only=False)
         )
-        print(f'AIDE load message: {msg}')
         self.model.to(DEVICE).eval()
-        self.dct.to(DEVICE)
-        # Transform should not include normalization because DCT is applied on raw ToTensor
         self.transform = transforms.Compose(
             [
                 transforms.Resize((256, 256)),
                 transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
             ]
         )
-        self.normalize = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+
+
+class RIGID_Detector(DetectorWrapper):
+    def __init__(self, model_path=None):
+        sys.path.append('detector_codes/RIGID-main')
+        from rigid_detector import RIGID_Detector as RIGID_Impl
+
+        self.model = RIGID_Impl(lamb=0.05)
+        self.model.model.to(DEVICE)
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
+                ),
+            ]
         )
-        self.resize = transforms.Resize((256, 256))
 
     @torch.no_grad()
     def detect(self, data):
-        # data is [B, 3, 256, 256] from 0 to 1
-        batch_stacked = []
-        for i in range(data.shape[0]):
-            img = data[i]
-            x_minmin, x_maxmax, x_minmin1, x_maxmax1 = self.dct(img)
-            # All must be 256x256
-            # Stack: [x_minmin, x_maxmax, x_minmin1, x_maxmax1, original]
-            # All need to be normalized
-            stacked = torch.stack(
-                [
-                    self.normalize(self.resize(x_minmin)),
-                    self.normalize(self.resize(x_maxmax)),
-                    self.normalize(self.resize(x_minmin1)),
-                    self.normalize(self.resize(x_maxmax1)),
-                    self.normalize(img),
-                ],
-                dim=0,
-            )
-            batch_stacked.append(stacked)
+        return self.model.detect(data)
 
-        batch_data = torch.stack(batch_stacked, dim=0)  # [B, 5, 3, 256, 256]
-        out = self.model(batch_data)
-        # AIDE has 2 classes
-        return out.softmax(dim=1)[:, 1].flatten()
+
+class Resnet50_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        sys.path.append('detector_codes/Resnet50-main')
+        from networks.resnet import resnet50
+
+        self.model = resnet50(num_classes=1)
+        self.model.load_state_dict(
+            torch.load(model_path, map_location='cpu', weights_only=False)
+        )
+        self.model.to(DEVICE).eval()
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((256, 256)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
 
 
 class SAFE_Detector(DetectorWrapper):
@@ -304,108 +427,6 @@ class SAFE_Detector(DetectorWrapper):
         )
 
 
-class CLIPDetection_Detector(DetectorWrapper):
-    def __init__(self, model_path):
-        sys.path.append('detector_codes/CLIPDetection-main')
-        # CLIPDetection uses openai-clip. We need to handle its specific architecture.
-        # This implementation assumes dependencies are installed.
-        from models.clip_models import CLIPModel
-
-        self.model = CLIPModel(name='ViT-L/14', num_classes=1)
-        self.model.load_state_dict(
-            torch.load(model_path, map_location='cpu', weights_only=False)
-        )
-        self.model.to(DEVICE).eval()
-        # CLIP standard normalization
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=(0.48145466, 0.4578275, 0.40821073),
-                    std=(0.26862954, 0.26130258, 0.27577711),
-                ),
-            ]
-        )
-
-
-class FreqNet_Detector(DetectorWrapper):
-    def __init__(self, model_path):
-        sys.path.append('detector_codes/FreqNet-DeepfakeDetection-main')
-        from networks.freqnet import FreqNet
-
-        self.model = FreqNet(num_classes=1)
-        self.model.load_state_dict(
-            torch.load(model_path, map_location='cpu', weights_only=False)
-        )
-        self.model.to(DEVICE).eval()
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize((256, 256)),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        )
-
-
-class DFFreq_Detector(DetectorWrapper):
-    def __init__(self, model_path):
-        sys.path.append('detector_codes/DFFreq-main')
-        from networks.resnet import resnet50
-
-        self.model = resnet50(num_classes=1)
-        self.model.load_state_dict(
-            torch.load(model_path, map_location='cpu', weights_only=False)
-        )
-        self.model.to(DEVICE).eval()
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize((256, 256)),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        )
-
-
-class C2P_CLIP_Detector(DetectorWrapper):
-    def __init__(self, model_path):
-        sys.path.append('detector_codes/C2P-CLIP-DeepfakeDetection-main')
-        from networks.c2p_clip import C2P_CLIP_Model
-
-        self.model = C2P_CLIP_Model(name='openai/clip-vit-large-patch14', num_classes=1)
-        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
-        if 'model' in state_dict:
-            state_dict = state_dict['model']
-
-        # Clean state dict by removing 'module.' prefix
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            if k.startswith('module.'):
-                new_state_dict[k[7:]] = v
-            else:
-                new_state_dict[k] = v
-
-        self.model.load_state_dict(new_state_dict, strict=False)
-        self.model.to(DEVICE).eval()
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=(0.48145466, 0.4578275, 0.40821073),
-                    std=(0.26862954, 0.26130258, 0.27577711),
-                ),
-            ]
-        )
-
-    def detect(self, img):
-        return self.model.detect(img)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -422,6 +443,7 @@ def main():
             'GramNet',
             'LGrad',
             'NPR',
+            'RIGID',
             'Resnet50',
             'SAFE',
         ],
@@ -482,6 +504,7 @@ def main():
         'GramNet': './AIGIBench_models/Gram-Net-main/model_epoch_best.pth',
         'LGrad': './AIGIBench_models/LGrad-master/model_epoch_best.pth',
         'NPR': './AIGIBench_models/NPR-DeepfakeDetection-main/model_epoch_best.pth',
+        'RIGID': None,
         'Resnet50': './AIGIBench_models/Resnet50-main/model_epoch_best.pth',
         'SAFE': './AIGIBench_models/SAFE-main/model_epoch_best.pth',
     }
@@ -496,6 +519,7 @@ def main():
         'GramNet': GramNet_Detector,
         'LGrad': LGrad_Detector,
         'NPR': NPR_Detector,
+        'RIGID': RIGID_Detector,
         'Resnet50': Resnet50_Detector,
         'SAFE': SAFE_Detector,
     }
