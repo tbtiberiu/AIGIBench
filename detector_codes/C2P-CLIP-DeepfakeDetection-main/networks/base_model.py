@@ -25,14 +25,23 @@ class BaseModel(nn.Module):
         save_path = os.path.join(self.save_dir, save_filename)
 
         # serialize model and optimizer to dict
-        # state_dict = {
-        #     'model': self.model.state_dict(),
-        #     'optimizer' : self.optimizer.state_dict(),
-        #     'total_steps' : self.total_steps,
-        # }
-
-        torch.save(self.model.state_dict(), save_path)
-        print(f'Saving model {save_path}')
+        state_dict = {
+            'model': self.model.state_dict(),
+            # 'optimizer' : self.optimizer.state_dict(),
+            'total_steps': self.total_steps,
+        }
+        torch.save(state_dict, save_path)
+        try:
+            try:
+                savemodel = self.model.module
+            except:
+                savemodel = self.model
+            #            savemodel.model.vision_model = savemodel.vision_tower_lora.merge_and_unload()
+            save_path2 = os.path.join(self.save_dir, f'model_epoch_{epoch}')
+            os.makedirs(save_path2, mode=0o777, exist_ok=True)
+            savemodel.model.save_pretrained(save_path2, safe_serialization=False)
+        except:
+            pass
 
     # load models from the disk
     def load_networks(self, epoch):

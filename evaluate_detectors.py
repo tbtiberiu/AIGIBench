@@ -5,6 +5,7 @@ import sys
 
 import numpy as np
 import torch
+import torch.nn as nn
 from datasets import load_dataset
 from dotenv import load_dotenv
 from sklearn import metrics
@@ -370,6 +371,94 @@ class DFFreq_Detector(DetectorWrapper):
         )
 
 
+class C2P_CLIP_Model(nn.Module):
+    def __init__(
+        self,
+        name='openai/clip-vit-large-patch14',
+        num_classes=1,
+        lora_r=16,
+        lora_alpha=32,
+        lora_dropout=0.05,
+    ):
+        super(C2P_CLIP_Model, self).__init__()
+        from peft import LoraConfig, get_peft_model
+        from transformers import CLIPModel
+
+        self.model = CLIPModel.from_pretrained(name)
+        del self.model.text_model
+        del self.model.text_projection
+        del self.model.logit_scale
+
+        self.vision_tower = self.model.vision_model
+        self.vision_tower.requires_grad_(False)
+        self.model.visual_projection.requires_grad_(False)
+
+        lora_config = LoraConfig(
+            r=lora_r,
+            lora_alpha=lora_alpha,
+            target_modules=['q_proj', 'k_proj', 'v_proj'],
+            lora_dropout=lora_dropout,
+            bias='none',
+        )
+        self.vision_tower_lora = get_peft_model(self.vision_tower, lora_config)
+
+        self.model.fc = nn.Linear(768, num_classes)
+        torch.nn.init.normal_(self.model.fc.weight.data, 0.0, 0.02)
+
+    def encode_image(self, img):
+        vision_outputs = self.vision_tower_lora(
+            pixel_values=img,
+            output_attentions=self.model.config.output_attentions,
+            output_hidden_states=self.model.config.output_hidden_states,
+            return_dict=self.model.config.return_dict,
+        )
+        pooled_output = vision_outputs[1]  # pooled_output
+        image_features = self.model.visual_projection(pooled_output)
+        return image_features
+
+    def forward(self, img):
+        image_embeds = self.encode_image(img)
+        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+        return self.model.fc(image_embeds)
+
+    def detect(self, img):
+        with torch.no_grad():
+            output = self.forward(img)
+            return torch.sigmoid(output).squeeze(1)
+
+
+class C2P_CLIP_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        self.model = C2P_CLIP_Model(name='openai/clip-vit-large-patch14', num_classes=1)
+        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+        if 'model' in state_dict:
+            state_dict = state_dict['model']
+
+        # Clean state dict by removing 'module.' prefix
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith('module.'):
+                new_state_dict[k[7:]] = v
+            else:
+                new_state_dict[k] = v
+
+        self.model.load_state_dict(new_state_dict, strict=False)
+        self.model.to(DEVICE).eval()
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=(0.48145466, 0.4578275, 0.40821073),
+                    std=(0.26862954, 0.26130258, 0.27577711),
+                ),
+            ]
+        )
+
+    def detect(self, img):
+        return self.model.detect(img)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -377,16 +466,17 @@ def main():
         type=str,
         required=True,
         choices=[
+            'AIDE',
+            'C2P-CLIP',
+            'CLIPDetection',
             'CNNDetection',
-            'NPR',
-            'Resnet50',
+            'DFFreq',
+            'FreqNet',
             'GramNet',
             'LGrad',
-            'AIDE',
+            'NPR',
+            'Resnet50',
             'SAFE',
-            'CLIPDetection',
-            'FreqNet',
-            'DFFreq',
         ],
     )
     parser.add_argument(
@@ -411,7 +501,7 @@ def main():
                 3: 'CycleGAN',
                 4: 'DALLE2',
                 5: 'GauGAN',
-                6: 'Glide',
+                6: 'GLIDE',
                 7: 'Midjourney',
                 8: 'ProGAN',
                 9: 'SD14',
@@ -436,29 +526,31 @@ def main():
     }
 
     weight_mapping = {
+        'AIDE': './AIGIBench_models/AIDE-main/model_epoch_best.pth',
+        'C2P-CLIP': './AIGIBench_models/C2P-CLIP-DeepfakeDetection-main/model_epoch_best.pth',
+        'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
-        'NPR': './AIGIBench_models/NPR-DeepfakeDetection-main/model_epoch_best.pth',
-        'Resnet50': './AIGIBench_models/Resnet50-main/model_epoch_best.pth',
+        'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_last.pth',
+        'FreqNet': './AIGIBench_models/FreqNet-DeepfakeDetection-main/model_epoch_best.pth',
         'GramNet': './AIGIBench_models/Gram-Net-main/model_epoch_best.pth',
         'LGrad': './AIGIBench_models/LGrad-master/model_epoch_best.pth',
-        'AIDE': './AIGIBench_models/AIDE-main/model_epoch_best.pth',
+        'NPR': './AIGIBench_models/NPR-DeepfakeDetection-main/model_epoch_best.pth',
+        'Resnet50': './AIGIBench_models/Resnet50-main/model_epoch_best.pth',
         'SAFE': './AIGIBench_models/SAFE-main/checkpoint-best.pth',
-        'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
-        'FreqNet': './AIGIBench_models/FreqNet-DeepfakeDetection-main/model_epoch_best.pth',
-        'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_last.pth',
     }
 
     detector_classes = {
+        'AIDE': AIDE_Detector,
+        'C2P-CLIP': C2P_CLIP_Detector,
+        'CLIPDetection': CLIPDetection_Detector,
         'CNNDetection': CNNDetection_Detector,
-        'NPR': NPR_Detector,
-        'Resnet50': Resnet50_Detector,
+        'DFFreq': DFFreq_Detector,
+        'FreqNet': FreqNet_Detector,
         'GramNet': GramNet_Detector,
         'LGrad': LGrad_Detector,
-        'AIDE': AIDE_Detector,
+        'NPR': NPR_Detector,
+        'Resnet50': Resnet50_Detector,
         'SAFE': SAFE_Detector,
-        'CLIPDetection': CLIPDetection_Detector,
-        'FreqNet': FreqNet_Detector,
-        'DFFreq': DFFreq_Detector,
     }
 
     print(f'Initializing {args.model} detector...')
