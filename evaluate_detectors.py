@@ -371,64 +371,11 @@ class DFFreq_Detector(DetectorWrapper):
         )
 
 
-class C2P_CLIP_Model(nn.Module):
-    def __init__(
-        self,
-        name='openai/clip-vit-large-patch14',
-        num_classes=1,
-        lora_r=16,
-        lora_alpha=32,
-        lora_dropout=0.05,
-    ):
-        super(C2P_CLIP_Model, self).__init__()
-        from peft import LoraConfig, get_peft_model
-        from transformers import CLIPModel
-
-        self.model = CLIPModel.from_pretrained(name)
-        del self.model.text_model
-        del self.model.text_projection
-        del self.model.logit_scale
-
-        self.vision_tower = self.model.vision_model
-        self.vision_tower.requires_grad_(False)
-        self.model.visual_projection.requires_grad_(False)
-
-        lora_config = LoraConfig(
-            r=lora_r,
-            lora_alpha=lora_alpha,
-            target_modules=['q_proj', 'k_proj', 'v_proj'],
-            lora_dropout=lora_dropout,
-            bias='none',
-        )
-        self.vision_tower_lora = get_peft_model(self.vision_tower, lora_config)
-
-        self.model.fc = nn.Linear(768, num_classes)
-        torch.nn.init.normal_(self.model.fc.weight.data, 0.0, 0.02)
-
-    def encode_image(self, img):
-        vision_outputs = self.vision_tower_lora(
-            pixel_values=img,
-            output_attentions=self.model.config.output_attentions,
-            output_hidden_states=self.model.config.output_hidden_states,
-            return_dict=self.model.config.return_dict,
-        )
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.model.visual_projection(pooled_output)
-        return image_features
-
-    def forward(self, img):
-        image_embeds = self.encode_image(img)
-        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
-        return self.model.fc(image_embeds)
-
-    def detect(self, img):
-        with torch.no_grad():
-            output = self.forward(img)
-            return torch.sigmoid(output).squeeze(1)
-
-
 class C2P_CLIP_Detector(DetectorWrapper):
     def __init__(self, model_path):
+        sys.path.append('detector_codes/C2P-CLIP-DeepfakeDetection-main')
+        from networks.c2p_clip import C2P_CLIP_Model
+
         self.model = C2P_CLIP_Model(name='openai/clip-vit-large-patch14', num_classes=1)
         state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
         if 'model' in state_dict:
@@ -530,13 +477,13 @@ def main():
         'C2P-CLIP': './AIGIBench_models/C2P-CLIP-DeepfakeDetection-main/model_epoch_best.pth',
         'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
-        'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_last.pth',
+        'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_best.pth',
         'FreqNet': './AIGIBench_models/FreqNet-DeepfakeDetection-main/model_epoch_best.pth',
         'GramNet': './AIGIBench_models/Gram-Net-main/model_epoch_best.pth',
         'LGrad': './AIGIBench_models/LGrad-master/model_epoch_best.pth',
         'NPR': './AIGIBench_models/NPR-DeepfakeDetection-main/model_epoch_best.pth',
         'Resnet50': './AIGIBench_models/Resnet50-main/model_epoch_best.pth',
-        'SAFE': './AIGIBench_models/SAFE-main/checkpoint-best.pth',
+        'SAFE': './AIGIBench_models/SAFE-main/model_epoch_best.pth',
     }
 
     detector_classes = {
