@@ -140,7 +140,7 @@ if __name__ == '__main__':
         os.makedirs(log_path)
     Logger(os.path.join(log_path, 'log.log'))
 
-    print("Loading AIGIBench dataset from HuggingFace...")
+    print('Loading AIGIBench dataset from HuggingFace...')
     ds = load_dataset('TheKernel01/AIGIBench')
     train_data = ds['train']
 

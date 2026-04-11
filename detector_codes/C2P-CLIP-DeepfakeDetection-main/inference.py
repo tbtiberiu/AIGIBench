@@ -1,19 +1,18 @@
 import argparse
-import sys
-import time
 import os
+import random
+import time
+import warnings
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from sklearn.metrics import (
-    average_precision_score,
-    precision_recall_curve,
-    accuracy_score,
-)
 from data import create_dataloader
-import random
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+)
 from transformers import CLIPModel
-import warnings
 
 warnings.filterwarnings('ignore')
 
