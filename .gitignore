@@ -5,3 +5,5 @@
 AIGIBench_models/
 
 __pycache__/
+
+checkpoints/
