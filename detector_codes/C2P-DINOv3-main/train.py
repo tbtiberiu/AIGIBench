@@ -16,7 +16,7 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 from dataset import AIGIBenchDataset, get_train_transforms, get_val_transforms
-from model import C2P_DINOv2_Model
+from model import C2P_DINOv3_Model
 
 
 def seed_everything(seed=123):
@@ -67,7 +67,7 @@ def train():
     )
 
     # Initialize Model
-    model = C2P_DINOv2_Model().to(device)
+    model = C2P_DINOv3_Model().to(device)
 
     # Optimizer and Loss
     optimizer = optim.AdamW(
@@ -123,7 +123,9 @@ def train():
         )
 
         # Save Checkpoint
-        checkpoint_name = f'dinov2_lora_epoch_{epoch + 1}_acc_{avg_val_acc:.4f}.pth'
+        checkpoint_name = (
+            f'dinov3_convnext_lora_epoch_{epoch + 1}_acc_{avg_val_acc:.4f}.pth'
+        )
         save_path = os.path.join(checkpoints_dir, checkpoint_name)
         torch.save(
             {

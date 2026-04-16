@@ -282,6 +282,33 @@ class C2P_DINOv2_Detector(DetectorWrapper):
         )
 
 
+class C2P_DINOv3_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        sys.path.append('detector_codes/C2P-DINOv3-main')
+        from model import C2P_DINOv3_Model
+
+        self.model = C2P_DINOv3_Model()
+        if model_path is not None:
+            state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+            self.model.load_state_dict(
+                state_dict['model_state_dict']
+                if 'model_state_dict' in state_dict
+                else state_dict,
+                strict=False,
+            )
+        self.model.to(DEVICE).eval()
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+
+
 class CLIPDetection_Detector(DetectorWrapper):
     def __init__(self, model_path):
         sys.path.append('detector_codes/CLIPDetection-main')
@@ -514,6 +541,7 @@ def main():
             'AIDE',
             'C2P-CLIP',
             'C2P-DINOv2',
+            'C2P-DINOv3',
             'CLIPDetection',
             'CNNDetection',
             'DFFreq',
@@ -576,6 +604,7 @@ def main():
         'AIDE': './AIGIBench_models/AIDE-main/model_epoch_best.pth',
         'C2P-CLIP': './AIGIBench_models/C2P-CLIP-DeepfakeDetection-main/model_epoch_best.pth',
         'C2P-DINOv2': './AIGIBench_models/C2P-DINOv2-main/model_epoch_best.pth',
+        'C2P-DINOv3': './AIGIBench_models/C2P-DINOv3-main/model_epoch_best.pth',
         'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
         'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_best.pth',
@@ -592,6 +621,7 @@ def main():
         'AIDE': AIDE_Detector,
         'C2P-CLIP': C2P_CLIP_Detector,
         'C2P-DINOv2': C2P_DINOv2_Detector,
+        'C2P-DINOv3': C2P_DINOv3_Detector,
         'CLIPDetection': CLIPDetection_Detector,
         'CNNDetection': CNNDetection_Detector,
         'DFFreq': DFFreq_Detector,
