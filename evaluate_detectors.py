@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from sklearn import metrics
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+from tqdm import tqdm
 
 CACHE_DIR = None
 
@@ -145,7 +146,6 @@ class HFImageDataset(Dataset):
         return image, label
 
 
-# Detector base and implementations
 class DetectorWrapper:
     def __init__(self):
         self.model = None
@@ -642,7 +642,16 @@ def main():
         )
         scores = []
         total = 0
-        for i, (imgs, _) in enumerate(loader):
+
+        # Calculate expected number of batches based on samples limit
+        total_batches = (
+            min(len(dataset_obj), args.limit) + args.batch_size - 1
+        ) // args.batch_size
+        pbar = tqdm(
+            loader, total=total_batches, desc=f'Evaluating {dataset_name}', leave=False
+        )
+
+        for i, (imgs, _) in enumerate(pbar):
             imgs = imgs.to(DEVICE)
             # Invert: high score = real (ID-positive)
             # Detector returns p(fake), so we take 1 - p(fake)
