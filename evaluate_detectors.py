@@ -51,31 +51,81 @@ def calculate_average_precision(id_predictions, ood_predictions):
     return metrics.average_precision_score(labels, all_predictions)
 
 
-def sim_auc(similarities, datasets):
+def print_table_header():
+    print('\n' + '=' * 95)
+    print(
+        f'{"Dataset":<25} | {"Similarity":<10} | {"Accuracy":<10} | {"AUC":<10} | {"AP":<10} | {"FPR95":<10}'
+    )
+    print('-' * 95)
+
+
+def print_legend():
+    print('\nLegend:')
+    print(
+        '- Similarity: The average detector score indicating the predicted probability of the image being Real (ID).'
+    )
+    print(
+        '- Accuracy: The percentage of correctly classified images using a 0.5 threshold.'
+    )
+    print(
+        '  (For Real: score >= 0.5 is correct; For Generated: score < 0.5 is correct)'
+    )
+    print('- AUC: Area Under the Receiver Operating Characteristic Curve (ROC AUC).')
+    print('- AP: Average Precision, summarizing the precision-recall curve.')
+    print('- FPR95: False Positive Rate when the True Positive Rate (TPR) is at 95%.')
+
+
+def print_evaluation_results(similarities, datasets):
     id_confi = similarities[0]
-    auc_scores, fpr_scores = [], []
+    id_name = datasets[0]
+
+    print_table_header()
+
+    # Real Section
+    id_acc = (id_confi >= 0.5).mean()
+    id_sim = id_confi.mean()
+    print(
+        f'{id_name:<25} | {id_sim:<10.4f} | {id_acc:<10.4f} | {"-":<10} | {"-":<10} | {"-":<10}'
+    )
+    print(
+        f'{"Average Real":<25} | {id_sim:<10.4f} | {id_acc:<10.4f} | {"-":<10} | {"-":<10} | {"-":<10}'
+    )
+    print('-' * 95)
+
+    # Generated Section
+    auc_scores, ap_scores, fpr_scores, sim_scores, acc_scores = [], [], [], [], []
+
     for ood_confi, dataset in zip(similarities[1:], datasets[1:]):
         auroc, fpr_95 = calculate_auc_metrics(id_confi, ood_confi)
-        auc_scores.append(auroc)
-        fpr_scores.append(fpr_95)
-        print(f'Dataset: {dataset:<25} | AUC: {auroc:.4f} | FPR95: {fpr_95:.4f}')
-    avg_auc, avg_fpr = np.mean(auc_scores), np.mean(fpr_scores)
-    print('-' * 60)
-    print(f'Average AUC: {avg_auc:.4f} | Average FPR95: {avg_fpr:.4f}')
-    return avg_auc, avg_fpr
-
-
-def sim_ap(similarities, datasets):
-    id_confi = similarities[0]
-    ap_scores = []
-    for ood_confi, dataset in zip(similarities[1:], datasets[1:]):
         aver_p = calculate_average_precision(id_confi, ood_confi)
+
+        # Accuracy for fake images: score < 0.5 is correct
+        acc = (ood_confi < 0.5).mean()
+        sim = ood_confi.mean()
+
+        auc_scores.append(auroc)
         ap_scores.append(aver_p)
-        print(f'Dataset: {dataset:<25} | AP: {aver_p:.4f}')
+        fpr_scores.append(fpr_95)
+        sim_scores.append(sim)
+        acc_scores.append(acc)
+
+        print(
+            f'{dataset:<25} | {sim:<10.4f} | {acc:<10.4f} | {auroc:<10.4f} | {aver_p:<10.4f} | {fpr_95:<10.4f}'
+        )
+
+    avg_sim = np.mean(sim_scores)
+    avg_acc = np.mean(acc_scores)
+    avg_auc = np.mean(auc_scores)
     avg_ap = np.mean(ap_scores)
-    print('-' * 40)
-    print(f'Average AP: {avg_ap:.4f}')
-    return avg_ap
+    avg_fpr = np.mean(fpr_scores)
+
+    print('-' * 95)
+    print(
+        f'{"Average Generated":<25} | {avg_sim:<10.4f} | {avg_acc:<10.4f} | {avg_auc:<10.4f} | {avg_ap:<10.4f} | {avg_fpr:<10.4f}'
+    )
+    print('=' * 95)
+
+    print_legend()
 
 
 class HFImageDataset(Dataset):
@@ -214,7 +264,9 @@ class C2P_DINOv2_Detector(DetectorWrapper):
         if model_path is not None:
             state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
             self.model.load_state_dict(
-                state_dict['model_state_dict'] if 'model_state_dict' in state_dict else state_dict,
+                state_dict['model_state_dict']
+                if 'model_state_dict' in state_dict
+                else state_dict,
                 strict=False,
             )
         self.model.to(DEVICE).eval()
@@ -602,16 +654,14 @@ def main():
 
         scores = torch.cat(scores)[: args.limit]
         print(
-            f'{dataset_name:<25}, Count: {len(scores)}, Mean Score: {scores.mean():.4f}'
+            f'{dataset_name:<25}, Count: {len(scores)}, Similarity: {scores.mean():.4f}'
         )
         sim_datasets.append(scores.numpy())
 
-    print('\n' + '=' * 60)
+    print('\n' + '=' * 95)
     print(f'Results for {args.model}:')
-    print('=' * 60)
-    sim_auc(sim_datasets, test_datasets)
-    print('\n' + '-' * 40)
-    sim_ap(sim_datasets, test_datasets)
+    print('=' * 95)
+    print_evaluation_results(sim_datasets, test_datasets)
 
 
 if __name__ == '__main__':
