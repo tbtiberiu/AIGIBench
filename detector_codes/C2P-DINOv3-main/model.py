@@ -1,16 +1,16 @@
 import torch
 import torch.nn as nn
 from peft import LoraConfig, get_peft_model
-from transformers import AutoModel, AutoConfig
+from transformers import AutoModel
 
 
 class C2P_DINOv3_Model(nn.Module):
     def __init__(
         self,
-        model_name="facebook/dinov3-vitl16-pretrain-lvd1689m",
+        model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
         lora_r=16,
         lora_alpha=32,
-        lora_dropout=0.05,
+        lora_dropout=0.1,
     ):
         super(C2P_DINOv3_Model, self).__init__()
 
@@ -23,9 +23,10 @@ class C2P_DINOv3_Model(nn.Module):
         lora_config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,
-            target_modules=["q_proj", "k_proj", "v_proj"],
+            target_modules=['q_proj', 'k_proj', 'v_proj'],
             lora_dropout=lora_dropout,
-            bias="none",
+            bias='none',
+            use_dora=True,
         )
 
         # Apply LoRA to the backbone

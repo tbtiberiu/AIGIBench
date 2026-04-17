@@ -50,20 +50,10 @@ def train():
     val_ds = AIGIBenchDataset(ds['validation'], transform=get_val_transforms())
 
     train_loader = DataLoader(
-        train_ds,
-        batch_size=16,
-        shuffle=True,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True,
+        train_ds, batch_size=16, shuffle=True, num_workers=8, pin_memory=True
     )
     val_loader = DataLoader(
-        val_ds,
-        batch_size=16,
-        shuffle=False,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True,
+        val_ds, batch_size=16, shuffle=False, num_workers=8, pin_memory=True
     )
 
     # Initialize Model

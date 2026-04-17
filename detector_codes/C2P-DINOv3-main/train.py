@@ -50,20 +50,10 @@ def train():
     val_ds = AIGIBenchDataset(ds['validation'], transform=get_val_transforms())
 
     train_loader = DataLoader(
-        train_ds,
-        batch_size=16,
-        shuffle=True,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True,
+        train_ds, batch_size=8, shuffle=True, num_workers=8, pin_memory=True
     )
     val_loader = DataLoader(
-        val_ds,
-        batch_size=16,
-        shuffle=False,
-        num_workers=8,
-        pin_memory=True,
-        persistent_workers=True,
+        val_ds, batch_size=8, shuffle=False, num_workers=8, pin_memory=True
     )
 
     # Initialize Model
@@ -73,7 +63,7 @@ def train():
     optimizer = optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=1e-4,
-        weight_decay=0.01,
+        weight_decay=0.05,
     )
     criterion = nn.BCEWithLogitsLoss()
 
@@ -123,15 +113,14 @@ def train():
         )
 
         # Save Checkpoint
-        checkpoint_name = (
-            f'dinov3_convnext_lora_epoch_{epoch + 1}_acc_{avg_val_acc:.4f}.pth'
-        )
+        checkpoint_name = f'dinov3_lora_epoch_{epoch + 1}_acc_{avg_val_acc:.4f}.pth'
         save_path = os.path.join(checkpoints_dir, checkpoint_name)
         torch.save(
             {
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'val_loss': avg_val_loss,
                 'val_acc': avg_val_acc,
             },
             save_path,
