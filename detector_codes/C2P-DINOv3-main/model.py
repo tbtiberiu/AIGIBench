@@ -8,8 +8,8 @@ class C2P_DINOv3_Model(nn.Module):
     def __init__(
         self,
         model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
-        lora_r=16,
-        lora_alpha=32,
+        lora_r=8,
+        lora_alpha=16,
         lora_dropout=0.1,
     ):
         super(C2P_DINOv3_Model, self).__init__()

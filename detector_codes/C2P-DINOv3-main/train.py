@@ -68,7 +68,10 @@ def train():
     criterion = nn.BCEWithLogitsLoss()
 
     num_epochs = 1
-    print(f'Starting training for {num_epochs} epochs...')
+    max_steps = 1000
+    global_step = 0
+
+    print(f'Starting training for {num_epochs} epochs or {max_steps} steps...')
 
     for epoch in range(num_epochs):
         model.train()
@@ -76,6 +79,9 @@ def train():
 
         pbar = tqdm(train_loader, desc=f'Epoch {epoch + 1}/{num_epochs}')
         for i, (images, labels) in enumerate(pbar):
+            if global_step >= max_steps:
+                break
+
             images, labels = images.to(device), labels.to(device).unsqueeze(1)
 
             optimizer.zero_grad()
@@ -84,6 +90,7 @@ def train():
             loss.backward()
             optimizer.step()
 
+            global_step += 1
             running_loss += loss.item()
             if i % 10 == 0:
                 pbar.set_postfix({'loss': running_loss / (i + 1)})
