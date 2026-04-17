@@ -34,7 +34,7 @@ def parse_args():
         '--lr', type=float, default=1e-4, help='Learning rate (default: 1e-4)'
     )
     parser.add_argument(
-        '--batch-size', type=int, default=16, help='Batch size (default: 8)'
+        '--batch-size', type=int, default=32, help='Batch size (default: 32)'
     )
     parser.add_argument(
         '--epochs', type=int, default=1, help='Number of epochs (default: 1)'
@@ -76,8 +76,9 @@ def run_validation(model, val_loader, criterion, device, epoch):
     with torch.inference_mode():
         for images, labels in tqdm(val_loader, desc='Validating', leave=False):
             images, labels = images.to(device), labels.to(device).unsqueeze(1)
-            logits = model(images)
-            loss = criterion(logits, labels)
+            with torch.amp.autocast('cuda', dtype=torch.float16):
+                logits = model(images)
+                loss = criterion(logits, labels)
             val_loss += loss.item()
 
             preds = (torch.sigmoid(logits) > 0.5).float()
@@ -138,7 +139,9 @@ def train():
 
     # Optimizer and Loss
     optimizer = optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=args.lr,
+        weight_decay=0.01,
     )
     criterion = nn.BCEWithLogitsLoss()
 
@@ -151,6 +154,7 @@ def train():
     )
 
     global_step = 0
+    scaler = torch.amp.GradScaler('cuda')
 
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -166,10 +170,13 @@ def train():
             images, labels = images.to(device), labels.to(device).unsqueeze(1)
 
             optimizer.zero_grad()
-            logits = model(images)
-            loss = criterion(logits, labels)
-            loss.backward()
-            optimizer.step()
+            with torch.amp.autocast('cuda', dtype=torch.float16):
+                logits = model(images)
+                loss = criterion(logits, labels)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             scheduler.step()
 
             global_step += 1

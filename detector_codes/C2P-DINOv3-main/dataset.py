@@ -29,8 +29,13 @@ def get_train_transforms(size=224):
             v2.Resize(size + 32, antialias=True),
             v2.RandomCrop(size),
             v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(),
+            v2.RandomApply(
+                [v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                p=0.5,
+            ),
             v2.RandomApply([v2.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=0.5),
-            v2.RandomApply([v2.JPEG(quality=(50, 95))], p=0.3),
+            v2.RandomApply([v2.JPEG(quality=(50, 95))], p=0.5),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]

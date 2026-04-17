@@ -8,9 +8,9 @@ class C2P_DINOv3_Model(nn.Module):
     def __init__(
         self,
         model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
-        lora_r=8,
-        lora_alpha=16,
-        lora_dropout=0.05,
+        lora_r=16,
+        lora_alpha=32,
+        lora_dropout=0.1,
     ):
         super(C2P_DINOv3_Model, self).__init__()
 
@@ -33,14 +33,19 @@ class C2P_DINOv3_Model(nn.Module):
 
         # Head (ViT-Large has hidden size of 1024)
         hidden_size = self.backbone.config.hidden_size
-        self.fc = nn.Linear(hidden_size, 1)
-        torch.nn.init.zeros_(self.fc.weight.data)
-        torch.nn.init.zeros_(self.fc.bias.data)
+        self.head = nn.Sequential(
+            nn.Linear(hidden_size, 512),
+            nn.GELU(),
+            nn.Dropout(0.3),
+            nn.Linear(512, 1),
+        )
+        nn.init.zeros_(self.head[-1].weight)
+        nn.init.zeros_(self.head[-1].bias)
 
     def forward(self, x):
         outputs = self.backbone(x)
         cls_token = outputs.last_hidden_state[:, 0]
-        return self.fc(cls_token)
+        return self.head(cls_token)
 
     def detect(self, x):
         with torch.inference_mode():
