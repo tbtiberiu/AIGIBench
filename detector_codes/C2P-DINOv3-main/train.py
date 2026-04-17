@@ -6,8 +6,10 @@ import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from dataset import AIGIBenchDataset, get_train_transforms, get_val_transforms
 from datasets import load_dataset
 from dotenv import load_dotenv
+from model import C2P_DINOv3_Model
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -15,9 +17,6 @@ from tqdm import tqdm
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
-
-from dataset import AIGIBenchDataset, get_train_transforms, get_val_transforms
-from model import C2P_DINOv3_Model
 
 
 def seed_everything(seed=123):
@@ -35,13 +34,13 @@ def parse_args():
         '--lr', type=float, default=1e-4, help='Learning rate (default: 1e-4)'
     )
     parser.add_argument(
-        '--batch-size', type=int, default=8, help='Batch size (default: 8)'
+        '--batch-size', type=int, default=16, help='Batch size (default: 8)'
     )
     parser.add_argument(
         '--epochs', type=int, default=1, help='Number of epochs (default: 1)'
     )
     parser.add_argument(
-        '--max-steps', type=int, default=2000, help='Max training steps (default: 2000)'
+        '--max-steps', type=int, default=5000, help='Max training steps (default: 5000)'
     )
     parser.add_argument(
         '--num-workers', type=int, default=8, help='DataLoader workers (default: 8)'

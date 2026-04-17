@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from torchvision import transforms
+from torchvision.transforms import v2
 
 
 class AIGIBenchDataset(Dataset):
@@ -23,23 +23,27 @@ class AIGIBenchDataset(Dataset):
 
 
 def get_train_transforms(size=224):
-    return transforms.Compose(
+    return v2.Compose(
         [
-            transforms.Resize(size + 32),
-            transforms.RandomCrop(size),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            v2.ToImage(),
+            v2.Resize(size + 32, antialias=True),
+            v2.RandomCrop(size),
+            v2.RandomHorizontalFlip(),
+            v2.RandomApply([v2.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=0.5),
+            v2.RandomApply([v2.JPEG(quality=(50, 95))], p=0.3),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
 
 
 def get_val_transforms(size=224):
-    return transforms.Compose(
+    return v2.Compose(
         [
-            transforms.Resize(size + 32),
-            transforms.CenterCrop(size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            v2.ToImage(),
+            v2.Resize(size + 32, antialias=True),
+            v2.CenterCrop(size),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )

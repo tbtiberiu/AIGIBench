@@ -8,9 +8,9 @@ class C2P_DINOv3_Model(nn.Module):
     def __init__(
         self,
         model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
-        lora_r=16,
-        lora_alpha=32,
-        lora_dropout=0.1,
+        lora_r=8,
+        lora_alpha=16,
+        lora_dropout=0.05,
     ):
         super(C2P_DINOv3_Model, self).__init__()
 
@@ -26,7 +26,6 @@ class C2P_DINOv3_Model(nn.Module):
             target_modules=['q_proj', 'k_proj', 'v_proj'],
             lora_dropout=lora_dropout,
             bias='none',
-            use_dora=True,
         )
 
         # Apply LoRA to the backbone
@@ -35,13 +34,12 @@ class C2P_DINOv3_Model(nn.Module):
         # Head (ViT-Large has hidden size of 1024)
         hidden_size = self.backbone.config.hidden_size
         self.fc = nn.Linear(hidden_size, 1)
-        torch.nn.init.normal_(self.fc.weight.data, 0.0, 0.02)
-        torch.nn.init.constant_(self.fc.bias.data, 0.0)
+        torch.nn.init.zeros_(self.fc.weight.data)
+        torch.nn.init.zeros_(self.fc.bias.data)
 
     def forward(self, x):
         outputs = self.backbone(x)
-        # For ViT, pooler_output is usually the [CLS] token representation
-        cls_token = outputs.pooler_output
+        cls_token = outputs.last_hidden_state[:, 0]
         return self.fc(cls_token)
 
     def detect(self, x):
