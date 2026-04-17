@@ -60,18 +60,25 @@ def train():
     model = C2P_DINOv3_Model().to(device)
 
     # Optimizer and Loss
+    lr = 1e-4
     optimizer = optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=1e-4,
-        weight_decay=0.05,
+        filter(lambda p: p.requires_grad, model.parameters()), lr=lr
     )
     criterion = nn.BCEWithLogitsLoss()
 
     num_epochs = 1
-    max_steps = 1000
+    max_steps = 2500
     global_step = 0
 
-    print(f'Starting training for {num_epochs} epochs or {max_steps} steps...')
+    scheduler = optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=lr,
+        total_steps=max_steps,
+        pct_start=0.1,
+        anneal_strategy='cos',
+    )
+
+    print(f'Starting training for {num_epochs} epoch or {max_steps} steps...')
 
     for epoch in range(num_epochs):
         model.train()
@@ -89,11 +96,15 @@ def train():
             loss = criterion(logits, labels)
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             global_step += 1
             running_loss += loss.item()
             if i % 10 == 0:
-                pbar.set_postfix({'loss': running_loss / (i + 1)})
+                current_lr = optimizer.param_groups[0]['lr']
+                pbar.set_postfix(
+                    {'loss': running_loss / (i + 1), 'lr': f'{current_lr:.2e}'}
+                )
 
         # Validation
         model.eval()
