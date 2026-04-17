@@ -151,7 +151,7 @@ class DetectorWrapper:
         self.model = None
         self.transform = None
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def detect(self, data):
         # Default: sigmoid probability where high = fake if output dim is 1
         # If output dim is 2, use softmax[:, 1]
@@ -192,7 +192,7 @@ class AIDE_Detector(DetectorWrapper):
         )
         self.resize = transforms.Resize((256, 256))
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def detect(self, data):
         # data is [B, 3, 256, 256] from 0 to 1
         batch_stacked = []
@@ -483,7 +483,7 @@ class RIGID_Detector(DetectorWrapper):
             ]
         )
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def detect(self, data):
         return self.model.detect(data)
 

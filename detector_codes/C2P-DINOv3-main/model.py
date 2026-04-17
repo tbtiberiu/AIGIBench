@@ -8,8 +8,8 @@ class C2P_DINOv3_Model(nn.Module):
     def __init__(
         self,
         model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
-        lora_r=8,
-        lora_alpha=16,
+        lora_r=16,
+        lora_alpha=32,
         lora_dropout=0.1,
     ):
         super(C2P_DINOv3_Model, self).__init__()
@@ -45,6 +45,6 @@ class C2P_DINOv3_Model(nn.Module):
         return self.fc(cls_token)
 
     def detect(self, x):
-        with torch.no_grad():
+        with torch.inference_mode():
             logits = self.forward(x)
             return torch.sigmoid(logits).squeeze(1)
