@@ -149,7 +149,7 @@ class C2P_DINOv3_Model(nn.Module):
         model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
         lora_r=16,
         lora_alpha=32,
-        lora_dropout=0.5,
+        lora_dropout=0.8,
         lora_target_modules=None,
         forensic_dim=256,
         unfreeze_last_blocks=2,
