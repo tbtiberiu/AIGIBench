@@ -1,6 +1,9 @@
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset
+from torchvision.transforms import InterpolationMode
 from torchvision.transforms import v2
+from torchvision.transforms.v2 import functional as tvf
 
 
 class AIGIBenchDataset(Dataset):
@@ -22,31 +25,99 @@ class AIGIBenchDataset(Dataset):
         return image, torch.tensor(label, dtype=torch.float32)
 
 
-def get_train_transforms(size=224):
+class RandomDownUpResize(nn.Module):
+    def __init__(self, scale_range=(0.55, 0.9), p=0.4):
+        super().__init__()
+        self.scale_range = scale_range
+        self.p = p
+        self.interpolations = [
+            InterpolationMode.BILINEAR,
+            InterpolationMode.BICUBIC,
+            InterpolationMode.NEAREST_EXACT,
+        ]
+
+    def forward(self, image):
+        if torch.rand(1).item() >= self.p:
+            return image
+
+        height, width = tvf.get_size(image)
+        scale = torch.empty(1).uniform_(*self.scale_range).item()
+        down_height = max(32, int(round(height * scale)))
+        down_width = max(32, int(round(width * scale)))
+
+        down_interpolation = self.interpolations[
+            torch.randint(len(self.interpolations), size=()).item()
+        ]
+        up_interpolation = self.interpolations[
+            torch.randint(len(self.interpolations), size=()).item()
+        ]
+
+        image = tvf.resize(
+            image,
+            [down_height, down_width],
+            interpolation=down_interpolation,
+            antialias=down_interpolation != InterpolationMode.NEAREST_EXACT,
+        )
+        return tvf.resize(
+            image,
+            [height, width],
+            interpolation=up_interpolation,
+            antialias=up_interpolation != InterpolationMode.NEAREST_EXACT,
+        )
+
+
+class RandomGaussianNoise(nn.Module):
+    def __init__(self, sigma_range=(0.002, 0.02), p=0.25):
+        super().__init__()
+        self.sigma_range = sigma_range
+        self.p = p
+
+    def forward(self, image):
+        if torch.rand(1).item() >= self.p:
+            return image
+
+        sigma = torch.empty(1).uniform_(*self.sigma_range).item()
+        noise = torch.randn_like(image) * sigma
+        return (image + noise).clamp(0.0, 1.0)
+
+
+def get_train_transforms(size=336):
     return v2.Compose(
         [
             v2.ToImage(),
-            v2.Resize(size + 32, antialias=True),
-            v2.RandomCrop(size),
-            v2.RandomHorizontalFlip(),
-            v2.RandomApply(
-                [v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
-                p=0.5,
+            v2.RandomResizedCrop(
+                size,
+                scale=(0.7, 1.0),
+                ratio=(0.9, 1.1),
+                interpolation=InterpolationMode.BICUBIC,
+                antialias=True,
             ),
-            v2.RandomApply([v2.GaussianBlur(kernel_size=5, sigma=(0.1, 3.0))], p=0.5),
-            v2.RandomApply([v2.JPEG(quality=(50, 95))], p=0.5),
-            v2.RandomApply([v2.RandomGrayscale(p=1.0)], p=0.1),
+            v2.RandomHorizontalFlip(),
+            RandomDownUpResize(p=0.4),
+            v2.RandomApply(
+                [
+                    v2.ColorJitter(
+                        brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02
+                    )
+                ],
+                p=0.25,
+            ),
+            v2.RandomApply([v2.GaussianBlur(kernel_size=5, sigma=(0.1, 1.2))], p=0.25),
+            v2.RandomAdjustSharpness(sharpness_factor=1.5, p=0.15),
+            v2.RandomApply([v2.JPEG(quality=(40, 95))], p=0.5),
             v2.ToDtype(torch.float32, scale=True),
+            RandomGaussianNoise(p=0.25),
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
 
 
-def get_val_transforms(size=224):
+def get_val_transforms(size=336, resize_size=None):
+    resize_size = resize_size or max(int(round(size * 1.15)), size)
     return v2.Compose(
         [
             v2.ToImage(),
-            v2.Resize(size + 32, antialias=True),
+            v2.Resize(resize_size, antialias=True),
             v2.CenterCrop(size),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),

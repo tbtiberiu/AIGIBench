@@ -281,32 +281,65 @@ class C2P_DINOv2_Detector(DetectorWrapper):
             ]
         )
 
+    def detect(self, img):
+        return self.model.detect(img)
+
 
 class C2P_DINOv3_Detector(DetectorWrapper):
     def __init__(self, model_path):
         sys.path.append('detector_codes/C2P-DINOv3-main')
         from model import C2P_DINOv3_Model
 
-        self.model = C2P_DINOv3_Model()
+        checkpoint = None
+        checkpoint_args = {}
         if model_path is not None:
-            state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+            checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+            if isinstance(checkpoint, dict):
+                checkpoint_args = checkpoint.get('args', {}) or {}
+
+        model_kwargs = {
+            'lora_r': checkpoint_args.get('lora_r', 16),
+            'lora_alpha': checkpoint_args.get('lora_alpha', 32),
+            'lora_dropout': checkpoint_args.get('lora_dropout', 0.1),
+            'forensic_dim': checkpoint_args.get('forensic_dim', 256),
+            'unfreeze_last_blocks': checkpoint_args.get('unfreeze_last_blocks', 0),
+            'image_size': checkpoint_args.get('image_size', 336),
+            'inference_resize': checkpoint_args.get('inference_resize', 384),
+            'tta_crops': checkpoint_args.get('tta_crops', 5),
+            'tta_flip': not checkpoint_args.get('no_tta_flip', False),
+        }
+        lora_target_modules = checkpoint_args.get('lora_target_modules')
+        if isinstance(lora_target_modules, str):
+            model_kwargs['lora_target_modules'] = [
+                module.strip()
+                for module in lora_target_modules.split(',')
+                if module.strip()
+            ]
+        elif lora_target_modules:
+            model_kwargs['lora_target_modules'] = lora_target_modules
+
+        self.model = C2P_DINOv3_Model(**model_kwargs)
+        if checkpoint is not None:
             self.model.load_state_dict(
-                state_dict['model_state_dict']
-                if 'model_state_dict' in state_dict
-                else state_dict,
+                checkpoint['model_state_dict']
+                if 'model_state_dict' in checkpoint
+                else checkpoint,
                 strict=False,
             )
         self.model.to(DEVICE).eval()
         self.transform = transforms.Compose(
             [
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
+                transforms.Resize(model_kwargs['inference_resize']),
+                transforms.CenterCrop(model_kwargs['image_size']),
                 transforms.ToTensor(),
                 transforms.Normalize(
                     mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
                 ),
             ]
         )
+
+    def detect(self, img):
+        return self.model.detect(img)
 
 
 class CLIPDetection_Detector(DetectorWrapper):

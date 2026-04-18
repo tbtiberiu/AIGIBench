@@ -1,7 +1,146 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModel
+
+
+class AttentionPooling(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.query = nn.Parameter(torch.randn(1, 1, dim))
+        self.key = nn.Linear(dim, dim)
+        self.value = nn.Linear(dim, dim)
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x):
+        batch_size, _, dim = x.shape
+        query = self.query.expand(batch_size, -1, -1)
+        key = self.key(x)
+        value = self.value(x)
+
+        attention = torch.matmul(query, key.transpose(-2, -1)) / (dim**0.5)
+        attention = self.softmax(attention)
+        return torch.matmul(attention, value).squeeze(1)
+
+
+class HighPassFilterBank(nn.Module):
+    def __init__(self):
+        super().__init__()
+        kernels = torch.tensor(
+            [
+                [
+                    [0, 0, -1, 0, 0],
+                    [0, -1, -2, -1, 0],
+                    [-1, -2, 16, -2, -1],
+                    [0, -1, -2, -1, 0],
+                    [0, 0, -1, 0, 0],
+                ],
+                [
+                    [0, 0, 0, 0, 0],
+                    [0, 1, -2, 1, 0],
+                    [0, -2, 4, -2, 0],
+                    [0, 1, -2, 1, 0],
+                    [0, 0, 0, 0, 0],
+                ],
+                [
+                    [0, 0, 0, 0, 0],
+                    [0, -1, 2, -1, 0],
+                    [0, 2, -4, 2, 0],
+                    [0, -1, 2, -1, 0],
+                    [0, 0, 0, 0, 0],
+                ],
+                [
+                    [0, 0, -1, 0, 0],
+                    [0, 0, 2, 0, 0],
+                    [0, 0, -1, 0, 0],
+                    [0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0],
+                ],
+                [
+                    [0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0],
+                    [-1, 2, -1, 0, 0],
+                    [0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0],
+                ],
+            ],
+            dtype=torch.float32,
+        )
+        self.register_buffer('kernels', kernels.unsqueeze(1))
+        self.register_buffer(
+            'rgb_mean',
+            torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1),
+        )
+        self.register_buffer(
+            'rgb_std',
+            torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1),
+        )
+
+    def forward(self, x):
+        x = (x * self.rgb_std + self.rgb_mean).clamp(0.0, 1.0)
+        x = 0.2989 * x[:, 0:1] + 0.5870 * x[:, 1:2] + 0.1140 * x[:, 2:3]
+        return F.conv2d(x, self.kernels, padding=2)
+
+
+class ForensicBranch(nn.Module):
+    def __init__(self, out_dim=256):
+        super().__init__()
+        self.hpf = HighPassFilterBank()
+        self.encoder = nn.Sequential(
+            nn.Conv2d(5, 32, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.GELU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.GELU(),
+            nn.Conv2d(128, out_dim, kernel_size=3, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(out_dim),
+            nn.GELU(),
+        )
+        self.pool = nn.AdaptiveAvgPool2d(1)
+
+    def forward(self, x):
+        x = self.hpf(x)
+        x = self.encoder(x)
+        return self.pool(x).flatten(1)
+
+
+def _resolve_attr_path(module, attr_path):
+    current = module
+    for attr in attr_path.split('.'):
+        if not hasattr(current, attr):
+            return None
+        current = getattr(current, attr)
+    return current
+
+
+def _find_transformer_layers(backbone):
+    candidate_paths = [
+        'encoder.layer',
+        'layers',
+        'blocks',
+        'transformer.layer',
+        'transformer.layers',
+        'model.encoder.layer',
+        'model.layers',
+        'backbone.encoder.layer',
+        'backbone.layers',
+        'backbone.blocks',
+    ]
+    for path in candidate_paths:
+        layers = _resolve_attr_path(backbone, path)
+        if isinstance(layers, (nn.ModuleList, list, tuple)) and len(layers) > 0:
+            return list(layers)
+
+    for _, module in backbone.named_modules():
+        if isinstance(module, nn.ModuleList) and len(module) > 4:
+            return list(module)
+
+    return []
 
 
 class C2P_DINOv3_Model(nn.Module):
@@ -10,31 +149,60 @@ class C2P_DINOv3_Model(nn.Module):
         model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
         lora_r=16,
         lora_alpha=32,
-        lora_dropout=0.1,
+        lora_dropout=0.5,
+        lora_target_modules=None,
+        forensic_dim=256,
+        unfreeze_last_blocks=2,
+        image_size=336,
+        inference_resize=None,
+        tta_crops=5,
+        tta_flip=True,
     ):
-        super(C2P_DINOv3_Model, self).__init__()
+        super().__init__()
 
-        # Load the DINOv3 ViT-Large model
-        self.backbone = AutoModel.from_pretrained(model_name, trust_remote_code=True)
-        self.backbone.requires_grad_(False)  # Freeze by default
+        if lora_target_modules is None:
+            lora_target_modules = [
+                'q_proj',
+                'k_proj',
+                'v_proj',
+                'out_proj',
+                'fc1',
+                'fc2',
+            ]
 
-        # Configure LoRA for ViT
-        # We target q_proj, k_proj, v_proj in the attention blocks based on DINOv3 architecture
+        self.inference_crop_size = image_size
+        self.inference_resize = (
+            inference_resize
+            if inference_resize is not None
+            else max(int(round(image_size * 1.15)), image_size)
+        )
+        self.tta_crops = max(1, tta_crops)
+        self.tta_flip = tta_flip
+
+        backbone = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        backbone.requires_grad_(False)
+        self._unfreeze_last_blocks(backbone, unfreeze_last_blocks)
+
         lora_config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,
-            target_modules=['q_proj', 'k_proj', 'v_proj'],
+            target_modules=lora_target_modules,
             lora_dropout=lora_dropout,
             bias='none',
         )
+        self.backbone = get_peft_model(backbone, lora_config)
 
-        # Apply LoRA to the backbone
-        self.backbone = get_peft_model(self.backbone, lora_config)
-
-        # Head (ViT-Large has hidden size of 1024)
         hidden_size = self.backbone.config.hidden_size
+        self.attn_pool = AttentionPooling(hidden_size)
+        self.rgb_proj = nn.Sequential(
+            nn.Linear(hidden_size * 2, hidden_size),
+            nn.LayerNorm(hidden_size),
+            nn.GELU(),
+            nn.Dropout(0.1),
+        )
+        self.forensic_branch = ForensicBranch(out_dim=forensic_dim)
         self.head = nn.Sequential(
-            nn.Linear(hidden_size, 512),
+            nn.Linear(hidden_size + forensic_dim, 512),
             nn.GELU(),
             nn.Dropout(0.3),
             nn.Linear(512, 1),
@@ -42,12 +210,73 @@ class C2P_DINOv3_Model(nn.Module):
         nn.init.zeros_(self.head[-1].weight)
         nn.init.zeros_(self.head[-1].bias)
 
+    def _unfreeze_last_blocks(self, backbone, unfreeze_last_blocks):
+        if unfreeze_last_blocks <= 0:
+            return
+
+        layers = _find_transformer_layers(backbone)
+        if not layers:
+            return
+
+        for block in layers[-unfreeze_last_blocks:]:
+            block.requires_grad_(True)
+
+        for attr_path in [
+            'layernorm',
+            'norm',
+            'post_layernorm',
+            'ln_post',
+            'final_layer_norm',
+        ]:
+            module = _resolve_attr_path(backbone, attr_path)
+            if isinstance(module, nn.Module):
+                module.requires_grad_(True)
+
     def forward(self, x):
         outputs = self.backbone(x)
-        cls_token = outputs.last_hidden_state[:, 0]
-        return self.head(cls_token)
+        last_hidden_state = outputs.last_hidden_state
+        cls_token = last_hidden_state[:, 0, :]
+        patch_tokens = last_hidden_state[:, 1:, :]
+
+        token_features = self.attn_pool(patch_tokens)
+        rgb_features = self.rgb_proj(torch.cat([cls_token, token_features], dim=1))
+        forensic_features = self.forensic_branch(x)
+        return self.head(torch.cat([rgb_features, forensic_features], dim=1))
+
+    def _build_tta_views(self, x):
+        _, _, height, width = x.shape
+        crop_size = min(self.inference_crop_size, height, width)
+
+        if height == crop_size and width == crop_size:
+            views = [x]
+        else:
+            max_top = max(height - crop_size, 0)
+            max_left = max(width - crop_size, 0)
+            candidate_positions = [
+                (0, 0),
+                (0, max_left),
+                (max_top, 0),
+                (max_top, max_left),
+                (max_top // 2, max_left // 2),
+            ]
+            views = []
+            seen = set()
+            for top, left in candidate_positions:
+                key = (int(top), int(left))
+                if key in seen:
+                    continue
+                seen.add(key)
+                views.append(x[:, :, top : top + crop_size, left : left + crop_size])
+                if len(views) >= self.tta_crops:
+                    break
+
+        if self.tta_flip:
+            views = views + [torch.flip(view, dims=(-1,)) for view in views]
+
+        return views
 
     def detect(self, x):
         with torch.inference_mode():
-            logits = self.forward(x)
-            return torch.sigmoid(logits).squeeze(1)
+            views = self._build_tta_views(x)
+            probs = [torch.sigmoid(self.forward(view)).squeeze(1) for view in views]
+            return torch.stack(probs, dim=0).mean(dim=0)
