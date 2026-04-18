@@ -153,10 +153,7 @@ class C2P_DINOv3_Model(nn.Module):
         lora_target_modules=None,
         forensic_dim=256,
         unfreeze_last_blocks=2,
-        image_size=336,
-        inference_resize=None,
-        tta_crops=5,
-        tta_flip=True,
+        image_size=256,
     ):
         super().__init__()
 
@@ -170,14 +167,8 @@ class C2P_DINOv3_Model(nn.Module):
                 'fc2',
             ]
 
-        self.inference_crop_size = image_size
-        self.inference_resize = (
-            inference_resize
-            if inference_resize is not None
-            else max(int(round(image_size * 1.15)), image_size)
-        )
-        self.tta_crops = max(1, tta_crops)
-        self.tta_flip = tta_flip
+        self.image_size = image_size
+        self.forensic_dim = forensic_dim
 
         backbone = AutoModel.from_pretrained(model_name, trust_remote_code=True)
         backbone.requires_grad_(False)
@@ -243,40 +234,6 @@ class C2P_DINOv3_Model(nn.Module):
         forensic_features = self.forensic_branch(x)
         return self.head(torch.cat([rgb_features, forensic_features], dim=1))
 
-    def _build_tta_views(self, x):
-        _, _, height, width = x.shape
-        crop_size = min(self.inference_crop_size, height, width)
-
-        if height == crop_size and width == crop_size:
-            views = [x]
-        else:
-            max_top = max(height - crop_size, 0)
-            max_left = max(width - crop_size, 0)
-            candidate_positions = [
-                (0, 0),
-                (0, max_left),
-                (max_top, 0),
-                (max_top, max_left),
-                (max_top // 2, max_left // 2),
-            ]
-            views = []
-            seen = set()
-            for top, left in candidate_positions:
-                key = (int(top), int(left))
-                if key in seen:
-                    continue
-                seen.add(key)
-                views.append(x[:, :, top : top + crop_size, left : left + crop_size])
-                if len(views) >= self.tta_crops:
-                    break
-
-        if self.tta_flip:
-            views = views + [torch.flip(view, dims=(-1,)) for view in views]
-
-        return views
-
     def detect(self, x):
         with torch.inference_mode():
-            views = self._build_tta_views(x)
-            probs = [torch.sigmoid(self.forward(view)).squeeze(1) for view in views]
-            return torch.stack(probs, dim=0).mean(dim=0)
+            return torch.sigmoid(self.forward(x)).squeeze(1)

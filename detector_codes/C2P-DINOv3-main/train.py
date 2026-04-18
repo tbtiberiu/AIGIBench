@@ -36,29 +36,22 @@ def parse_args():
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--backbone-lr-scale', type=float, default=0.25)
     parser.add_argument('--weight-decay', type=float, default=0.01)
-    parser.add_argument('--batch-size', type=int, default=8)
+    parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--epochs', type=int, default=5)
-    parser.add_argument('--max-steps', type=int, default=40000)
+    parser.add_argument('--max-steps', type=int, default=5000)
     parser.add_argument('--num-workers', type=int, default=8)
     parser.add_argument('--seed', type=int, default=123)
-    parser.add_argument('--image-size', type=int, default=336)
-    parser.add_argument('--inference-resize', type=int, default=384)
+    parser.add_argument('--image-size', type=int, default=256)
     parser.add_argument('--gradient-clip', type=float, default=1.0)
     parser.add_argument('--lora-r', type=int, default=16)
     parser.add_argument('--lora-alpha', type=int, default=32)
-    parser.add_argument('--lora-dropout', type=float, default=0.1)
+    parser.add_argument('--lora-dropout', type=float, default=0.5)
     parser.add_argument('--forensic-dim', type=int, default=256)
     parser.add_argument('--unfreeze-last-blocks', type=int, default=2)
     parser.add_argument(
         '--lora-target-modules',
         type=str,
         default='q_proj,k_proj,v_proj,out_proj,fc1,fc2',
-    )
-    parser.add_argument('--tta-crops', type=int, default=5)
-    parser.add_argument(
-        '--no-tta-flip',
-        action='store_true',
-        help='Disable horizontal-flip test-time augmentation',
     )
     parser.add_argument('--no-val', action='store_true')
     parser.add_argument('--val-every', type=int, default=1)
@@ -217,7 +210,6 @@ def train():
             dataset['validation'],
             transform=get_val_transforms(
                 size=args.image_size,
-                resize_size=args.inference_resize,
             ),
         )
         val_loader = DataLoader(
@@ -240,9 +232,6 @@ def train():
         forensic_dim=args.forensic_dim,
         unfreeze_last_blocks=args.unfreeze_last_blocks,
         image_size=args.image_size,
-        inference_resize=args.inference_resize,
-        tta_crops=args.tta_crops,
-        tta_flip=not args.no_tta_flip,
     ).to(device)
 
     trainable_params, total_params = count_parameters(model)

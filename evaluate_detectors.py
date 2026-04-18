@@ -300,13 +300,9 @@ class C2P_DINOv3_Detector(DetectorWrapper):
         model_kwargs = {
             'lora_r': checkpoint_args.get('lora_r', 16),
             'lora_alpha': checkpoint_args.get('lora_alpha', 32),
-            'lora_dropout': checkpoint_args.get('lora_dropout', 0.1),
-            'forensic_dim': checkpoint_args.get('forensic_dim', 256),
+            'lora_dropout': checkpoint_args.get('lora_dropout', 0.5),
             'unfreeze_last_blocks': checkpoint_args.get('unfreeze_last_blocks', 0),
-            'image_size': checkpoint_args.get('image_size', 336),
-            'inference_resize': checkpoint_args.get('inference_resize', 384),
-            'tta_crops': checkpoint_args.get('tta_crops', 5),
-            'tta_flip': not checkpoint_args.get('no_tta_flip', False),
+            'image_size': checkpoint_args.get('image_size', 256),
         }
         lora_target_modules = checkpoint_args.get('lora_target_modules')
         if isinstance(lora_target_modules, str):
@@ -327,10 +323,13 @@ class C2P_DINOv3_Detector(DetectorWrapper):
                 strict=False,
             )
         self.model.to(DEVICE).eval()
+
+        size = model_kwargs['image_size']
+        resize_size = max(int(round(size * 1.15)), size)
         self.transform = transforms.Compose(
             [
-                transforms.Resize(model_kwargs['inference_resize']),
-                transforms.CenterCrop(model_kwargs['image_size']),
+                transforms.Resize(resize_size),
+                transforms.CenterCrop(size),
                 transforms.ToTensor(),
                 transforms.Normalize(
                     mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]

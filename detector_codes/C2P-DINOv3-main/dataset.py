@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from torchvision.transforms import InterpolationMode
-from torchvision.transforms import v2
+from torchvision.transforms import InterpolationMode, v2
 from torchvision.transforms.v2 import functional as tvf
 
 
@@ -81,7 +80,7 @@ class RandomGaussianNoise(nn.Module):
         return (image + noise).clamp(0.0, 1.0)
 
 
-def get_train_transforms(size=336):
+def get_train_transforms(size=256):
     return v2.Compose(
         [
             v2.ToImage(),
@@ -112,8 +111,8 @@ def get_train_transforms(size=336):
     )
 
 
-def get_val_transforms(size=336, resize_size=None):
-    resize_size = resize_size or max(int(round(size * 1.15)), size)
+def get_val_transforms(size=256):
+    resize_size = max(int(round(size * 1.15)), size)
     return v2.Compose(
         [
             v2.ToImage(),
