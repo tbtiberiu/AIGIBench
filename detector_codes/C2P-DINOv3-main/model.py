@@ -24,9 +24,14 @@ class AttentionPooling(nn.Module):
         return torch.matmul(attention, value).squeeze(1)
 
 
-class HighPassFilterBank(nn.Module):
-    def __init__(self):
+class NPRBranch(nn.Module):
+    """Noise Pattern Residual — captures high-frequency artifacts, initialized with SRM filters."""
+
+    def __init__(self, out_dim=256):
         super().__init__()
+        # 5 SRM filters x 3 channels = 15 output channels
+        self.conv1 = nn.Conv2d(3, 15, kernel_size=5, padding=2, bias=False, groups=3)
+
         kernels = torch.tensor(
             [
                 [
@@ -67,28 +72,11 @@ class HighPassFilterBank(nn.Module):
             ],
             dtype=torch.float32,
         )
-        self.register_buffer('kernels', kernels.unsqueeze(1))
-        self.register_buffer(
-            'rgb_mean',
-            torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1),
-        )
-        self.register_buffer(
-            'rgb_std',
-            torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1),
-        )
+        # Initialize conv1 with the SRM kernels (shape 15, 1, 5, 5 for groups=3)
+        self.conv1.weight.data = kernels.unsqueeze(1).repeat(3, 1, 1, 1)
 
-    def forward(self, x):
-        x = (x * self.rgb_std + self.rgb_mean).clamp(0.0, 1.0)
-        x = 0.2989 * x[:, 0:1] + 0.5870 * x[:, 1:2] + 0.1140 * x[:, 2:3]
-        return F.conv2d(x, self.kernels, padding=2)
-
-
-class ForensicBranch(nn.Module):
-    def __init__(self, out_dim=256):
-        super().__init__()
-        self.hpf = HighPassFilterBank()
         self.encoder = nn.Sequential(
-            nn.Conv2d(5, 32, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(15, 32, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(32),
             nn.GELU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1, bias=False),
@@ -104,9 +92,13 @@ class ForensicBranch(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d(1)
 
     def forward(self, x):
-        x = self.hpf(x)
-        x = self.encoder(x)
-        return self.pool(x).flatten(1)
+        # Residual = image minus low-freq smoothed version
+        blur = F.avg_pool2d(x, kernel_size=3, stride=1, padding=1)
+        residual = x - blur
+
+        out = self.conv1(residual)
+        out = self.encoder(out)
+        return self.pool(out).flatten(1)
 
 
 def _resolve_attr_path(module, attr_path):
@@ -149,7 +141,7 @@ class C2P_DINOv3_Model(nn.Module):
         model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
         lora_r=16,
         lora_alpha=32,
-        lora_dropout=0.5,
+        lora_dropout=0.8,
         lora_target_modules=None,
         forensic_dim=256,
         unfreeze_last_blocks=2,
@@ -191,7 +183,7 @@ class C2P_DINOv3_Model(nn.Module):
             nn.GELU(),
             nn.Dropout(0.1),
         )
-        self.forensic_branch = ForensicBranch(out_dim=forensic_dim)
+        self.forensic_branch = NPRBranch(out_dim=forensic_dim)
         self.head = nn.Sequential(
             nn.Linear(hidden_size + forensic_dim, 512),
             nn.GELU(),

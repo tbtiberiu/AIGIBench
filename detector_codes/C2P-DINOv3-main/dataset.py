@@ -81,18 +81,14 @@ class RandomGaussianNoise(nn.Module):
 
 
 def get_train_transforms(size=256):
+    resize_size = max(int(round(size * 1.15)), size)
     return v2.Compose(
         [
             v2.ToImage(),
-            v2.RandomResizedCrop(
-                size,
-                scale=(0.7, 1.0),
-                ratio=(0.9, 1.1),
-                interpolation=InterpolationMode.BICUBIC,
-                antialias=True,
-            ),
+            v2.Resize(resize_size, antialias=True),
+            v2.RandomCrop(size),
             v2.RandomHorizontalFlip(),
-            RandomDownUpResize(p=0.4),
+            RandomDownUpResize(p=0.1),
             v2.RandomApply(
                 [
                     v2.ColorJitter(
