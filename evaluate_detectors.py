@@ -300,9 +300,10 @@ class C2P_DINOv3_Detector(DetectorWrapper):
         model_kwargs = {
             'lora_r': checkpoint_args.get('lora_r', 16),
             'lora_alpha': checkpoint_args.get('lora_alpha', 32),
-            'lora_dropout': checkpoint_args.get('lora_dropout', 0.8),
+            'lora_dropout': checkpoint_args.get('lora_dropout', 0.5),
             'unfreeze_last_blocks': checkpoint_args.get('unfreeze_last_blocks', 0),
             'image_size': checkpoint_args.get('image_size', 256),
+            'forensic_dim': checkpoint_args.get('forensic_dim', 256),
         }
         lora_target_modules = checkpoint_args.get('lora_target_modules')
         if isinstance(lora_target_modules, str):
