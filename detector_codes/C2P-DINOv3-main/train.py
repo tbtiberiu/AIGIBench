@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument('--gradient-clip', type=float, default=1.0)
     parser.add_argument('--lora-r', type=int, default=16)
     parser.add_argument('--lora-alpha', type=int, default=32)
-    parser.add_argument('--lora-dropout', type=float, default=0.8)
+    parser.add_argument('--lora-dropout', type=float, default=0.5)
     parser.add_argument('--forensic-dim', type=int, default=256)
     parser.add_argument('--unfreeze-last-blocks', type=int, default=2)
     parser.add_argument(
@@ -119,12 +119,9 @@ def save_checkpoint(path, epoch, global_step, model, optimizer, metrics, args):
 def run_validation(model, val_loader, criterion, device, epoch):
     model.eval()
     val_loss = 0.0
-    correct = 0
     total = 0
-    real_correct = 0
-    fake_correct = 0
-    real_total = 0
-    fake_total = 0
+    all_preds = []
+    all_labels = []
 
     print('Running validation...')
     with torch.inference_mode():
@@ -138,29 +135,35 @@ def run_validation(model, val_loader, criterion, device, epoch):
 
             batch_size = labels.size(0)
             val_loss += loss.item() * batch_size
-
-            preds = (torch.sigmoid(logits) > 0.5).float()
-            correct += (preds == labels).sum().item()
             total += batch_size
 
-            real_mask = labels == 0
-            fake_mask = labels == 1
-            if real_mask.any():
-                real_correct += (preds[real_mask] == labels[real_mask]).sum().item()
-                real_total += real_mask.sum().item()
-            if fake_mask.any():
-                fake_correct += (preds[fake_mask] == labels[fake_mask]).sum().item()
-                fake_total += fake_mask.sum().item()
+            all_preds.append(torch.sigmoid(logits).cpu())
+            all_labels.append(labels.cpu())
+
+    all_preds = torch.cat(all_preds, dim=0).numpy()
+    all_labels = torch.cat(all_labels, dim=0).numpy()
+
+    threshold = 0.5
+    preds = (all_preds > threshold).astype(float)
+    acc = (preds == all_labels).mean()
+    real_mask = all_labels == 0
+    fake_mask = all_labels == 1
+    real_acc = (
+        (preds[real_mask] == all_labels[real_mask]).mean() if real_mask.any() else 0
+    )
+    fake_acc = (
+        (preds[fake_mask] == all_labels[fake_mask]).mean() if fake_mask.any() else 0
+    )
+    balanced_acc = 0.5 * (real_acc + fake_acc)
 
     metrics = {
         'val_loss': val_loss / max(total, 1),
-        'val_acc': correct / max(total, 1),
-        'val_real_acc': real_correct / max(real_total, 1),
-        'val_fake_acc': fake_correct / max(fake_total, 1),
+        'val_acc': float(acc),
+        'val_real_acc': float(real_acc),
+        'val_fake_acc': float(fake_acc),
+        'val_balanced_acc': float(balanced_acc),
     }
-    metrics['val_balanced_acc'] = 0.5 * (
-        metrics['val_real_acc'] + metrics['val_fake_acc']
-    )
+
     print(
         f'Epoch {epoch} | Val Loss: {metrics["val_loss"]:.4f} | '
         f'Val Acc: {metrics["val_acc"]:.4f} | '
@@ -242,6 +245,7 @@ def train():
 
     optimizer = build_optimizer(model, args)
     criterion = nn.BCEWithLogitsLoss()
+
     scheduler = optim.lr_scheduler.OneCycleLR(
         optimizer,
         max_lr=[group['lr'] for group in optimizer.param_groups],
@@ -269,6 +273,7 @@ def train():
 
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True).unsqueeze(1)
+
             optimizer.zero_grad(set_to_none=True)
 
             with get_amp_context(device):
@@ -297,6 +302,21 @@ def train():
             scheduler.step()
             global_step += 1
             running_loss += loss.item()
+
+            if global_step % 1000 == 0:
+                step_checkpoint_path = os.path.join(
+                    checkpoints_dir, f'model_step_{global_step}.pth'
+                )
+                save_checkpoint(
+                    step_checkpoint_path,
+                    epoch,
+                    global_step,
+                    model,
+                    optimizer,
+                    {},
+                    args,
+                )
+                print(f'Saved periodic checkpoint to {step_checkpoint_path}')
 
             if step_idx % 10 == 0 or step_idx == 1:
                 current_lr = max(group['lr'] for group in optimizer.param_groups)

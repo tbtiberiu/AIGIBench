@@ -141,7 +141,7 @@ class C2P_DINOv3_Model(nn.Module):
         model_name='facebook/dinov3-vitl16-pretrain-lvd1689m',
         lora_r=16,
         lora_alpha=32,
-        lora_dropout=0.8,
+        lora_dropout=0.5,
         lora_target_modules=None,
         forensic_dim=256,
         unfreeze_last_blocks=2,
@@ -184,11 +184,15 @@ class C2P_DINOv3_Model(nn.Module):
             nn.Dropout(0.1),
         )
         self.forensic_branch = NPRBranch(out_dim=forensic_dim)
+        self.forensic_gate = nn.Parameter(torch.tensor(0.3))
         self.head = nn.Sequential(
             nn.Linear(hidden_size + forensic_dim, 512),
+            nn.LayerNorm(512),
             nn.GELU(),
             nn.Dropout(0.3),
-            nn.Linear(512, 1),
+            nn.Linear(512, 128),
+            nn.GELU(),
+            nn.Linear(128, 1),
         )
         nn.init.zeros_(self.head[-1].weight)
         nn.init.zeros_(self.head[-1].bias)
@@ -224,7 +228,9 @@ class C2P_DINOv3_Model(nn.Module):
         token_features = self.attn_pool(patch_tokens)
         rgb_features = self.rgb_proj(torch.cat([cls_token, token_features], dim=1))
         forensic_features = self.forensic_branch(x)
-        return self.head(torch.cat([rgb_features, forensic_features], dim=1))
+        return self.head(
+            torch.cat([rgb_features, self.forensic_gate * forensic_features], dim=1)
+        )
 
     def detect(self, x):
         with torch.inference_mode():
