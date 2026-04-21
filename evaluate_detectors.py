@@ -28,9 +28,9 @@ torch.manual_seed(SEED)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)  # if you are using multi-GPU.
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.enabled = False
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.deterministic = False
+torch.backends.cudnn.enabled = True
 
 
 def calculate_auc_metrics(id_conf, ood_conf):
@@ -597,7 +597,9 @@ def main():
     parser.add_argument(
         '--limit', type=int, default=1000, help='Limit samples per subset for speed'
     )
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument(
+        '--batch_size', type=int, default=32, help='Batch size for evaluation'
+    )
     args = parser.parse_args()
 
     dataset_configs = {
@@ -637,7 +639,7 @@ def main():
         'AIDE': './AIGIBench_models/AIDE-main/model_epoch_best.pth',
         'C2P-CLIP': './AIGIBench_models/C2P-CLIP-DeepfakeDetection-main/model_epoch_best.pth',
         'C2P-DINOv2': './AIGIBench_models/C2P-DINOv2-main/model_epoch_best.pth',
-        'C2P-DINOv3': './detector_codes/C2P-DINOv3-main/checkpoints/model_step_5000.pth',
+        'C2P-DINOv3': './detector_codes/C2P-DINOv3-main/checkpoints/model_step_1000.pth',
         'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
         'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_best.pth',
@@ -701,7 +703,12 @@ def main():
 
     for dataset_name, dataset_obj in evaluation_datasets:
         loader = DataLoader(
-            dataset_obj, batch_size=args.batch_size, shuffle=False, num_workers=4
+            dataset_obj,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=8,
+            pin_memory=True,
+            persistent_workers=True,
         )
         scores = []
         total = 0
