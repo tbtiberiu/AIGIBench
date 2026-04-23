@@ -33,7 +33,7 @@ def seed_everything(seed=123):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train C2P DINOv3 Model')
-    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--lr', type=float, default=2e-4)
     parser.add_argument('--backbone-lr-scale', type=float, default=0.25)
     parser.add_argument('--weight-decay', type=float, default=0.01)
     parser.add_argument('--batch-size', type=int, default=16)
@@ -43,8 +43,8 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=123)
     parser.add_argument('--image-size', type=int, default=256)
     parser.add_argument('--gradient-clip', type=float, default=1.0)
-    parser.add_argument('--lora-r', type=int, default=16)
-    parser.add_argument('--lora-alpha', type=int, default=32)
+    parser.add_argument('--lora-r', type=int, default=8)
+    parser.add_argument('--lora-alpha', type=int, default=8)
     parser.add_argument('--lora-dropout', type=float, default=0.5)
     parser.add_argument('--forensic-dim', type=int, default=256)
     parser.add_argument('--unfreeze-last-blocks', type=int, default=2)

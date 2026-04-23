@@ -88,15 +88,7 @@ def get_train_transforms(size=256):
             v2.Resize(resize_size, antialias=True),
             v2.RandomCrop(size),
             v2.RandomHorizontalFlip(),
-            RandomDownUpResize(p=0.1),
-            v2.RandomApply(
-                [
-                    v2.ColorJitter(
-                        brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02
-                    )
-                ],
-                p=0.25,
-            ),
+            RandomDownUpResize(p=0.25),
             v2.RandomApply([v2.GaussianBlur(kernel_size=5, sigma=(0.1, 1.2))], p=0.25),
             v2.RandomAdjustSharpness(sharpness_factor=1.5, p=0.15),
             v2.RandomApply([v2.JPEG(quality=(40, 95))], p=0.5),

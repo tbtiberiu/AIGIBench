@@ -298,9 +298,9 @@ class C2P_DINOv3_Detector(DetectorWrapper):
                 checkpoint_args = checkpoint.get('args', {}) or {}
 
         model_kwargs = {
-            'lora_r': checkpoint_args.get('lora_r', 16),
-            'lora_alpha': checkpoint_args.get('lora_alpha', 32),
-            'lora_dropout': checkpoint_args.get('lora_dropout', 0.8),
+            'lora_r': checkpoint_args.get('lora_r', 8),
+            'lora_alpha': checkpoint_args.get('lora_alpha', 8),
+            'lora_dropout': checkpoint_args.get('lora_dropout', 0.5),
             'unfreeze_last_blocks': checkpoint_args.get('unfreeze_last_blocks', 0),
             'image_size': checkpoint_args.get('image_size', 256),
             'forensic_dim': checkpoint_args.get('forensic_dim', 256),
@@ -639,7 +639,7 @@ def main():
         'AIDE': './AIGIBench_models/AIDE-main/model_epoch_best.pth',
         'C2P-CLIP': './AIGIBench_models/C2P-CLIP-DeepfakeDetection-main/model_epoch_best.pth',
         'C2P-DINOv2': './AIGIBench_models/C2P-DINOv2-main/model_epoch_best.pth',
-        'C2P-DINOv3': './detector_codes/C2P-DINOv3-main/checkpoints/model_step_1000.pth',
+        'C2P-DINOv3': './detector_codes/C2P-DINOv3-main/checkpoints/model_step_5000.pth',
         'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
         'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_best.pth',
