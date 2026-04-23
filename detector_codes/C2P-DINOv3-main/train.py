@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument(
         '--lora-target-modules',
         type=str,
-        default='q_proj,k_proj,v_proj,out_proj,fc1,fc2',
+        default='q_proj, k_proj, v_proj',
     )
     parser.add_argument('--no-val', action='store_true')
     parser.add_argument('--val-every', type=int, default=1)
