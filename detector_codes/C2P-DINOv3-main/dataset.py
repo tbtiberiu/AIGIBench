@@ -51,13 +51,13 @@ class DownUpResize(nn.Module):
             image,
             [down_height, down_width],
             interpolation=down_interpolation,
-            antialias=down_interpolation != InterpolationMode.NEAREST_EXACT,
+            antialias=False,
         )
         return tvf.resize(
             image,
             [height, width],
             interpolation=up_interpolation,
-            antialias=up_interpolation != InterpolationMode.NEAREST_EXACT,
+            antialias=False,
         )
 
 
@@ -78,7 +78,7 @@ def get_train_transforms(size=256):
     return v2.Compose(
         [
             v2.ToImage(),
-            v2.Resize(resize_size, antialias=True),
+            v2.Resize(resize_size, antialias=False),
             v2.RandomCrop(size),
             v2.RandomHorizontalFlip(),
             v2.RandomApply([DownUpResize()], p=0.25),
@@ -97,7 +97,7 @@ def get_val_transforms(size=256):
     return v2.Compose(
         [
             v2.ToImage(),
-            v2.Resize(resize_size, antialias=True),
+            v2.Resize(resize_size, antialias=False),
             v2.CenterCrop(size),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),

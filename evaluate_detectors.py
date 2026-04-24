@@ -639,7 +639,7 @@ def main():
         'AIDE': './AIGIBench_models/AIDE-main/model_epoch_best.pth',
         'C2P-CLIP': './AIGIBench_models/C2P-CLIP-DeepfakeDetection-main/model_epoch_best.pth',
         'C2P-DINOv2': './AIGIBench_models/C2P-DINOv2-main/model_epoch_best.pth',
-        'C2P-DINOv3': './detector_codes/C2P-DINOv3-main/checkpoints/model_step_10000.pth',
+        'C2P-DINOv3': './detector_codes/C2P-DINOv3-main/checkpoints/model_step_5000.pth',
         'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
         'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_best.pth',

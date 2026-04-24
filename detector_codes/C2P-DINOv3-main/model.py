@@ -93,11 +93,8 @@ class NPRBranch(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d(1)
 
     def forward(self, x):
-        # Residual = image minus low-freq smoothed version
-        blur = F.avg_pool2d(x, kernel_size=3, stride=1, padding=1)
-        residual = x - blur
-
-        out = self.conv1(residual)
+        # Apply SRM filters directly to the original image to extract high-frequency artifacts
+        out = self.conv1(x)
         out = self.encoder(out)
         return self.pool(out).flatten(1)
 
@@ -229,8 +226,11 @@ class C2P_DINOv3_Model(nn.Module):
         token_features = self.attn_pool(patch_tokens)
         rgb_features = self.rgb_proj(torch.cat([cls_token, token_features], dim=1))
         forensic_features = self.forensic_branch(x)
+        
+        # Apply Sigmoid to the gate to bound it between 0 and 1, creating a true gating effect
+        gate = torch.sigmoid(self.forensic_gate)
         return self.head(
-            torch.cat([rgb_features, self.forensic_gate * forensic_features], dim=1)
+            torch.cat([rgb_features, gate * forensic_features], dim=1)
         )
 
     def detect(self, x):
