@@ -74,6 +74,7 @@ class NPRBranch(nn.Module):
         )
         # Initialize conv1 with the SRM kernels (shape 15, 1, 5, 5 for groups=3)
         self.conv1.weight.data = kernels.unsqueeze(1).repeat(3, 1, 1, 1)
+        self.conv1.weight.requires_grad = False
 
         self.encoder = nn.Sequential(
             nn.Conv2d(15, 32, kernel_size=3, padding=1, bias=False),
@@ -184,7 +185,7 @@ class C2P_DINOv3_Model(nn.Module):
             nn.Dropout(0.1),
         )
         self.forensic_branch = NPRBranch(out_dim=forensic_dim)
-        self.forensic_gate = nn.Parameter(torch.tensor(0.3))
+        self.forensic_gate = nn.Parameter(torch.full((1, forensic_dim), 0.3))
         self.head = nn.Sequential(
             nn.Linear(hidden_size + forensic_dim, 512),
             nn.LayerNorm(512),

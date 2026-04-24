@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument('--weight-decay', type=float, default=0.01)
     parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--epochs', type=int, default=1)
-    parser.add_argument('--max-steps', type=int, default=5000)
+    parser.add_argument('--max-steps', type=int, default=10000)
     parser.add_argument('--num-workers', type=int, default=8)
     parser.add_argument('--seed', type=int, default=123)
     parser.add_argument('--image-size', type=int, default=256)
