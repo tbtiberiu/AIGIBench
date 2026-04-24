@@ -61,6 +61,18 @@ class DownUpResize(nn.Module):
         )
 
 
+class GaussianNoise(nn.Module):
+    def __init__(self, std=0.05):
+        super().__init__()
+        self.std = std
+
+    def forward(self, image):
+        if not image.is_floating_point():
+            image = tvf.to_dtype(image, torch.float32, scale=True)
+        noise = torch.randn_like(image) * self.std
+        return (image + noise).clamp(0, 1)
+
+
 def get_train_transforms(size=256):
     resize_size = max(int(round(size * 1.15)), size)
     return v2.Compose(
@@ -74,6 +86,7 @@ def get_train_transforms(size=256):
             v2.RandomAdjustSharpness(sharpness_factor=1.5, p=0.15),
             v2.RandomApply([v2.JPEG(quality=(40, 95))], p=0.5),
             v2.ToDtype(torch.float32, scale=True),
+            v2.RandomApply([GaussianNoise(std=0.05)], p=0.25),
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
