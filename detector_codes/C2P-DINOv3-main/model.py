@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModel
 
@@ -73,7 +74,6 @@ class NPRBranch(nn.Module):
         )
         # Initialize conv1 with the SRM kernels (shape 15, 1, 5, 5 for groups=3)
         self.conv1.weight.data = kernels.unsqueeze(1).repeat(3, 1, 1, 1)
-        self.conv1.weight.requires_grad = False
 
         self.encoder = nn.Sequential(
             nn.Conv2d(15, 32, kernel_size=3, padding=1, bias=False),
@@ -92,8 +92,11 @@ class NPRBranch(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d(1)
 
     def forward(self, x):
-        # Apply SRM filters directly to the original image to extract high-frequency artifacts
-        out = self.conv1(x)
+        # Residual = image minus low-freq smoothed version
+        blur = F.avg_pool2d(x, kernel_size=3, stride=1, padding=1)
+        residual = x - blur
+
+        out = self.conv1(residual)
         out = self.encoder(out)
         return self.pool(out).flatten(1)
 
@@ -141,7 +144,7 @@ class C2P_DINOv3_Model(nn.Module):
         lora_dropout=0.5,
         lora_target_modules=None,
         forensic_dim=256,
-        unfreeze_last_blocks=2,
+        unfreeze_last_blocks=0,
         image_size=256,
     ):
         super().__init__()
@@ -181,7 +184,7 @@ class C2P_DINOv3_Model(nn.Module):
             nn.Dropout(0.1),
         )
         self.forensic_branch = NPRBranch(out_dim=forensic_dim)
-        self.forensic_gate = nn.Parameter(torch.full((1, forensic_dim), 0.3))
+        self.forensic_gate = nn.Parameter(torch.tensor(0.3))
         self.head = nn.Sequential(
             nn.Linear(hidden_size + forensic_dim, 512),
             nn.LayerNorm(512),
@@ -225,10 +228,9 @@ class C2P_DINOv3_Model(nn.Module):
         token_features = self.attn_pool(patch_tokens)
         rgb_features = self.rgb_proj(torch.cat([cls_token, token_features], dim=1))
         forensic_features = self.forensic_branch(x)
-
-        # Apply Sigmoid to the gate to bound it between 0 and 1, creating a true gating effect
-        gate = torch.sigmoid(self.forensic_gate)
-        return self.head(torch.cat([rgb_features, gate * forensic_features], dim=1))
+        return self.head(
+            torch.cat([rgb_features, self.forensic_gate * forensic_features], dim=1)
+        )
 
     def detect(self, x):
         with torch.inference_mode():
