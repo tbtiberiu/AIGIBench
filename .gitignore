@@ -7,3 +7,5 @@ AIGIBench_models/
 __pycache__/
 
 checkpoints/
+
+C2P-DINOv3-main-backup/
