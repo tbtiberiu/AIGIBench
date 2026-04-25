@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModel
 
@@ -226,12 +225,10 @@ class C2P_DINOv3_Model(nn.Module):
         token_features = self.attn_pool(patch_tokens)
         rgb_features = self.rgb_proj(torch.cat([cls_token, token_features], dim=1))
         forensic_features = self.forensic_branch(x)
-        
+
         # Apply Sigmoid to the gate to bound it between 0 and 1, creating a true gating effect
         gate = torch.sigmoid(self.forensic_gate)
-        return self.head(
-            torch.cat([rgb_features, gate * forensic_features], dim=1)
-        )
+        return self.head(torch.cat([rgb_features, gate * forensic_features], dim=1))
 
     def detect(self, x):
         with torch.inference_mode():
