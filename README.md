@@ -128,6 +128,7 @@ We use the official code for all detection codes and make unified modifications 
 - [LaDeDa](https://github.com/barcavia/RealTime-DeepfakeDetection-in-the-RealWorld): Real-Time Deepfake Detection in the Real-World
 - [AIDE](https://github.com/shilinyan99/AIDE): A Sanity Check for AI-generated Image Detection
 - [SAFE](https://github.com/Ouxiang-Li/SAFE): Improving Synthetic Image Detection Towards Generalization: An Image Transformation Perspectives
+- [Effort](https://github.com/YZY-stack/Effort-AIGI-Detection): Orthogonal Subspace Decomposition for Generalizable AI-Generated Image Detection
 
 ## ⏳Detection Results (Continuously updating)
 **To ensure a fair comparison, we retrain all baseline methods on the Setting-II of AIGIBench.**
@@ -152,8 +153,12 @@ _If your retrained results differ significantly from those shown, please contact
 | FerretNet    | FerretNet: Efficient Synthetic Image Detection via Local Pixel Dependencies                                   | NIPS 2025 |  96.6  |  61.8  |**79.4**| 85.8 |
 | LOTA         | LOTA: Bit-Planes Guided AI-Generated Image Detection                                                          | ICCV 2025 |  89.3  |  65.1  | 77.4 | 83.1 |
 | BSF          | Beyond Semantic Features: Pixel-level Mapping for Generalized AI-Generated Image Detection                    | AAAI 2026 |  91.5  |  65.6  | 78.8 | 81.1 |
+| LTD          | Layer Consistency Matters: Elegant Latent Transition Discrepancy for Generalizable Synthetic Image Detection  | CVPR 2026 |  82.0  |  67.7  | 74.9 | 77.6 |
 
-
+**For specific reasons, in the following method, we directly utilize the official pre-trained weights for inference.**
+| Method       |    Paper                                                                                                      |    Ref    | R.Acc. | F.Acc. | Acc. | A.P. |
+|:------:      |:---------:                                                                                                    |:---------:|:------:|:------:|:----:|:----:|
+| DDA          | Dual Data Alignment Makes AI-Generated Image Detector Easier Generalizable                                    | NIPS 2025 |  93.9  |  69.3  | 81.6 | 90.2 |
  
 ## Citation
 ```
