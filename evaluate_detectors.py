@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import os
 import random
 import sys
@@ -161,10 +162,26 @@ class DetectorWrapper:
         else:
             return out.softmax(dim=1)[:, 1].flatten()
 
+    def _setup_path(self, path):
+        """Append path to sys.path and clear related cached modules to avoid collisions."""
+        if path not in sys.path:
+            sys.path.insert(0, path)
+        # Clear modules that might conflict (e.g., 'networks', 'models', 'utils', 'model')
+        # Use more surgical matching to avoid deleting things like 'dataclasses'
+        conflicting = ('networks', 'models', 'utils', 'data', 'model', 'util')
+        to_delete = [
+            m
+            for m in list(sys.modules.keys())
+            if m in conflicting or any(m.startswith(c + '.') for c in conflicting)
+        ]
+        for m in to_delete:
+            del sys.modules[m]
+
 
 class AIDE_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/AIDE-main')
+        super().__init__()
+        self._setup_path('detector_codes/AIDE-main')
         from data.dct import DCT_base_Rec_Module
         from models.AIDE import AIDE
 
@@ -222,7 +239,8 @@ class AIDE_Detector(DetectorWrapper):
 
 class C2P_CLIP_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/C2P-CLIP-DeepfakeDetection-main')
+        super().__init__()
+        self._setup_path('detector_codes/C2P-CLIP-DeepfakeDetection-main')
         from networks.c2p_clip import C2P_CLIP_Model
 
         self.model = C2P_CLIP_Model(name='openai/clip-vit-large-patch14', num_classes=1)
@@ -257,7 +275,8 @@ class C2P_CLIP_Detector(DetectorWrapper):
 
 class C2P_DINOv2_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/C2P-DINOv2-main')
+        super().__init__()
+        self._setup_path('detector_codes/C2P-DINOv2-main')
         from model import C2P_DINOv2_Model
 
         self.model = C2P_DINOv2_Model()
@@ -287,7 +306,8 @@ class C2P_DINOv2_Detector(DetectorWrapper):
 
 class C2P_DINOv3_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/C2P-DINOv3-main')
+        super().__init__()
+        self._setup_path('detector_codes/C2P-DINOv3-main')
         from model import C2P_DINOv3_Model
 
         checkpoint = None
@@ -344,7 +364,8 @@ class C2P_DINOv3_Detector(DetectorWrapper):
 
 class CLIPDetection_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/CLIPDetection-main')
+        super().__init__()
+        self._setup_path('detector_codes/CLIPDetection-main')
         # CLIPDetection uses openai-clip. We need to handle its specific architecture.
         # This implementation assumes dependencies are installed.
         from models.clip_models import CLIPModel
@@ -369,7 +390,8 @@ class CLIPDetection_Detector(DetectorWrapper):
 
 class CNNDetection_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/CNNDetection-master')
+        super().__init__()
+        self._setup_path('detector_codes/CNNDetection-master')
         from networks.resnet import resnet50
 
         self.model = resnet50(num_classes=1)
@@ -392,13 +414,15 @@ class CNNDetection_Detector(DetectorWrapper):
 
 class DFFreq_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/DFFreq-main')
-        from networks.resnet import resnet50
+        super().__init__()
+        self._setup_path('detector_codes/DFFreq-main')
+        import networks.resnet as resnet_module
 
-        self.model = resnet50(num_classes=1)
-        self.model.load_state_dict(
-            torch.load(model_path, map_location='cpu', weights_only=False)
-        )
+        importlib.reload(resnet_module)
+        self.model = resnet_module.resnet50(num_classes=1)
+
+        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+        self.model.load_state_dict(state_dict)
         self.model.to(DEVICE).eval()
         self.transform = transforms.Compose(
             [
@@ -411,9 +435,36 @@ class DFFreq_Detector(DetectorWrapper):
         )
 
 
+class Effort_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        super().__init__()
+        self._setup_path('detector_codes/Effort-AIGI-Detection')
+        from models.clip_models import ClipModel
+
+        opt = argparse.Namespace(use_svd=True)
+        self.model = ClipModel(
+            name='openai/clip-vit-large-patch14', opt=opt, num_classes=1
+        )
+        self.model.load_state_dict(
+            torch.load(model_path, map_location='cpu', weights_only=False)
+        )
+        self.model.to(DEVICE).eval()
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=(0.48145466, 0.4578275, 0.40821073),
+                    std=(0.26862954, 0.26130258, 0.27577711),
+                ),
+            ]
+        )
+
+
 class FreqNet_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/FreqNet-DeepfakeDetection-main')
+        super().__init__()
+        self._setup_path('detector_codes/FreqNet-DeepfakeDetection-main')
         from networks.freqnet import FreqNet
 
         self.model = FreqNet(num_classes=1)
@@ -434,10 +485,14 @@ class FreqNet_Detector(DetectorWrapper):
 
 class GramNet_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/Gram-Net-main')
-        from networks.resnet import resnet50
+        super().__init__()
+        self._setup_path('detector_codes/Gram-Net-main')
+        import networks.resnet as resnet_module
 
-        self.model = resnet50(num_classes=1)
+        importlib.reload(resnet_module)
+        # GramNet weights are ResNet-18
+        self.model = resnet_module.resnet18(num_classes=1)
+
         self.model.load_state_dict(
             torch.load(model_path, map_location='cpu', weights_only=False)
         )
@@ -455,14 +510,14 @@ class GramNet_Detector(DetectorWrapper):
 
 class LGrad_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        # LGrad classifier is a standard ResNet trained on gradients
-        # For simplicity, we assume we've already transformed images if we were in a pipeline,
-        # but here we'll just use the ResNet model.
-        # NOTE: Full LGrad requires a gradient transformation step which is expensive for runtime eval.
-        sys.path.append('detector_codes/LGrad-master/CNNDetection')
-        from networks.resnet import resnet50
+        super().__init__()
+        # LGrad weights match standard ResNet-50
+        self._setup_path('detector_codes/LGrad-master/CNNDetection')
+        import networks.resnet as resnet_module
 
-        self.model = resnet50(num_classes=1)
+        importlib.reload(resnet_module)
+        self.model = resnet_module.resnet50(num_classes=1)
+
         self.model.load_state_dict(
             torch.load(model_path, map_location='cpu', weights_only=False)
         )
@@ -480,7 +535,8 @@ class LGrad_Detector(DetectorWrapper):
 
 class NPR_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/NPR-DeepfakeDetection-main')
+        super().__init__()
+        self._setup_path('detector_codes/NPR-DeepfakeDetection-main')
         from networks.resnet import resnet50
 
         self.model = resnet50(num_classes=1)
@@ -501,7 +557,8 @@ class NPR_Detector(DetectorWrapper):
 
 class RIGID_Detector(DetectorWrapper):
     def __init__(self, model_path=None):
-        sys.path.append('detector_codes/RIGID-main')
+        super().__init__()
+        self._setup_path('detector_codes/RIGID-main')
         from rigid_detector import RIGID_Detector as RIGID_Impl
 
         self.model = RIGID_Impl(lamb=0.05)
@@ -523,7 +580,8 @@ class RIGID_Detector(DetectorWrapper):
 
 class Resnet50_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/Resnet50-main')
+        super().__init__()
+        self._setup_path('detector_codes/Resnet50-main')
         from networks.resnet import resnet50
 
         self.model = resnet50(num_classes=1)
@@ -544,7 +602,8 @@ class Resnet50_Detector(DetectorWrapper):
 
 class SAFE_Detector(DetectorWrapper):
     def __init__(self, model_path):
-        sys.path.append('detector_codes/SAFE-main')
+        super().__init__()
+        self._setup_path('detector_codes/SAFE-main')
         from models.resnet import resnet50
 
         self.model = resnet50(num_classes=2)
@@ -578,6 +637,7 @@ def main():
             'CLIPDetection',
             'CNNDetection',
             'DFFreq',
+            'Effort',
             'FreqNet',
             'GramNet',
             'LGrad',
@@ -591,7 +651,7 @@ def main():
         '--dataset',
         type=str,
         default='AIGC-Detection-Benchmark',
-        choices=['AIGC-Detection-Benchmark', 'MS-COCOAI', 'Real-and-Fake-Faces'],
+        choices=['AIGC-Detection-Benchmark', 'MS-COCOAI', '140k-Real-and-Fake-Faces'],
         help='HuggingFace dataset to evaluate on',
     )
     parser.add_argument(
@@ -629,7 +689,7 @@ def main():
             'path': 'TheKernel01/MS-COCOAI',
             'mapping': {1: 'SD21', 2: 'SDXL', 3: 'SD3', 4: 'DALLE3', 5: 'Midjourney 6'},
         },
-        'Real-and-Fake-Faces': {
+        '140k-Real-and-Fake-Faces': {
             'path': 'TheKernel01/140k-Real-and-Fake-Faces',
             'mapping': {1: 'StyleGAN'},
         },
@@ -643,6 +703,7 @@ def main():
         'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
         'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_best.pth',
+        'Effort': './AIGIBench_models/Effort-AIGI-Detection/model_epoch_best.pth',
         'FreqNet': './AIGIBench_models/FreqNet-DeepfakeDetection-main/model_epoch_best.pth',
         'GramNet': './AIGIBench_models/Gram-Net-main/model_epoch_best.pth',
         'LGrad': './AIGIBench_models/LGrad-master/model_epoch_best.pth',
@@ -660,6 +721,7 @@ def main():
         'CLIPDetection': CLIPDetection_Detector,
         'CNNDetection': CNNDetection_Detector,
         'DFFreq': DFFreq_Detector,
+        'Effort': Effort_Detector,
         'FreqNet': FreqNet_Detector,
         'GramNet': GramNet_Detector,
         'LGrad': LGrad_Detector,

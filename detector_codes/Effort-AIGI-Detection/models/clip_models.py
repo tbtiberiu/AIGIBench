@@ -13,12 +13,12 @@ class ClipModel(nn.Module):
         self.use_svd = opt.use_svd
         
         if self.use_svd:
-            self.model = CLIPModel.from_pretrained("/openai/clip-vit-large-patch14")
+            self.model = CLIPModel.from_pretrained(name)
             self.model.vision_model = apply_svd_residual_to_self_attn(self.model.vision_model, r=1024-1)
             
             self.fc = nn.Linear( 1024, num_classes )
         else:
-            self.model = CLIPModel.from_pretrained("/openai/clip-vit-large-patch14")
+            self.model = CLIPModel.from_pretrained(name)
             
             self.fc = nn.Linear( 1024, num_classes )
 
