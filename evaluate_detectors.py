@@ -300,7 +300,7 @@ class C2P_DINOv3_Detector(DetectorWrapper):
         model_kwargs = {
             'lora_r': checkpoint_args.get('lora_r', 16),
             'lora_alpha': checkpoint_args.get('lora_alpha', 32),
-            'lora_dropout': checkpoint_args.get('lora_dropout', 0.8),
+            'lora_dropout': checkpoint_args.get('lora_dropout', 0.5),
             'unfreeze_last_blocks': checkpoint_args.get('unfreeze_last_blocks', 0),
             'image_size': checkpoint_args.get('image_size', 256),
             'forensic_dim': checkpoint_args.get('forensic_dim', 256),
@@ -598,7 +598,7 @@ def main():
         '--limit', type=int, default=1000, help='Limit samples per subset for speed'
     )
     parser.add_argument(
-        '--batch_size', type=int, default=32, help='Batch size for evaluation'
+        '--batch_size', type=int, default=16, help='Batch size for evaluation'
     )
     args = parser.parse_args()
 
