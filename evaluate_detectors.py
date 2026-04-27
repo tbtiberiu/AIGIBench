@@ -53,6 +53,35 @@ def calculate_average_precision(id_predictions, ood_predictions):
     return metrics.average_precision_score(labels, all_predictions)
 
 
+def calculate_accuracy(id_conf, ood_conf, use_optimal=False):
+    """Calculates accuracy either using optimal threshold or fixed 0.5 threshold.
+    Returns (total_accuracy, real_accuracy)"""
+    if use_optimal:
+        all_conf = np.concatenate([id_conf, ood_conf])
+        labels = np.concatenate([np.ones(len(id_conf)), np.zeros(len(ood_conf))])
+
+        fpr, tpr, thresholds = metrics.roc_curve(labels, all_conf)
+
+        # Number of positive (ID) and negative (OOD) samples
+        P = len(id_conf)
+        N = len(ood_conf)
+
+        # Accuracy = (TP + TN) / (P + N)
+        accuracies = (tpr * P + (1 - fpr) * N) / (P + N)
+        best_idx = np.argmax(accuracies)
+
+        return accuracies[best_idx], tpr[best_idx]
+    else:
+        # Use fixed 0.5 threshold
+        r_acc = (id_conf >= 0.5).mean()
+        f_acc = (ood_conf < 0.5).mean()
+
+        P = len(id_conf)
+        N = len(ood_conf)
+        total_acc = (r_acc * P + f_acc * N) / (P + N)
+        return total_acc, r_acc
+
+
 def print_table_header():
     print('\n' + '=' * 95)
     print(
@@ -61,59 +90,82 @@ def print_table_header():
     print('-' * 95)
 
 
-def print_legend():
+def print_legend(use_optimal_threshold=False):
     print('\nLegend:')
     print(
         '- Similarity: The average detector score indicating the predicted probability of the image being Real (ID).'
     )
-    print(
-        '- Accuracy: The percentage of correctly classified images using a 0.5 threshold.'
-    )
-    print(
-        '  (For Real: score >= 0.5 is correct; For Generated: score < 0.5 is correct)'
-    )
+    if use_optimal_threshold:
+        print(
+            '- Accuracy: The maximum possible classification accuracy achieved by choosing an optimal threshold.'
+        )
+        print('  (Calculated pairwise between Real and the specific Generated dataset)')
+    else:
+        print(
+            '- Accuracy: The percentage of correctly classified images using a 0.5 threshold.'
+        )
+        print(
+            '  (For Real: score >= 0.5 is correct; For Generated: score < 0.5 is correct)'
+        )
     print('- AUC: Area Under the Receiver Operating Characteristic Curve (ROC AUC).')
     print('- AP: Average Precision, summarizing the precision-recall curve.')
     print('- FPR95: False Positive Rate when the True Positive Rate (TPR) is at 95%.')
 
 
-def print_evaluation_results(similarities, datasets):
+def print_evaluation_results(similarities, datasets, use_optimal_threshold=False):
     id_confi = similarities[0]
     id_name = datasets[0]
+
+    # Pre-calculate metrics to get average Real accuracy
+    ood_results = []
+    id_acc_scores = []
+
+    for ood_confi, dataset_name in zip(similarities[1:], datasets[1:]):
+        auroc, fpr_95 = calculate_auc_metrics(id_confi, ood_confi)
+        aver_p = calculate_average_precision(id_confi, ood_confi)
+        acc, r_acc = calculate_accuracy(
+            id_confi, ood_confi, use_optimal=use_optimal_threshold
+        )
+        sim = ood_confi.mean()
+
+        ood_results.append(
+            {
+                'name': dataset_name,
+                'sim': sim,
+                'acc': acc,
+                'auc': auroc,
+                'ap': aver_p,
+                'fpr': fpr_95,
+            }
+        )
+        id_acc_scores.append(r_acc)
+
+    avg_id_acc = np.mean(id_acc_scores) if id_acc_scores else 0.0
 
     print_table_header()
 
     # Real Section
-    id_acc = (id_confi >= 0.5).mean()
     id_sim = id_confi.mean()
     print(
-        f'{id_name:<25} | {id_sim:<10.4f} | {id_acc:<10.4f} | {"-":<10} | {"-":<10} | {"-":<10}'
+        f'{id_name:<25} | {id_sim:<10.4f} | {avg_id_acc:<10.4f} | {"-":<10} | {"-":<10} | {"-":<10}'
     )
     print(
-        f'{"Average Real":<25} | {id_sim:<10.4f} | {id_acc:<10.4f} | {"-":<10} | {"-":<10} | {"-":<10}'
+        f'{"Average Real":<25} | {id_sim:<10.4f} | {avg_id_acc:<10.4f} | {"-":<10} | {"-":<10} | {"-":<10}'
     )
     print('-' * 95)
 
     # Generated Section
     auc_scores, ap_scores, fpr_scores, sim_scores, acc_scores = [], [], [], [], []
 
-    for ood_confi, dataset in zip(similarities[1:], datasets[1:]):
-        auroc, fpr_95 = calculate_auc_metrics(id_confi, ood_confi)
-        aver_p = calculate_average_precision(id_confi, ood_confi)
-
-        # Accuracy for fake images: score < 0.5 is correct
-        acc = (ood_confi < 0.5).mean()
-        sim = ood_confi.mean()
-
-        auc_scores.append(auroc)
-        ap_scores.append(aver_p)
-        fpr_scores.append(fpr_95)
-        sim_scores.append(sim)
-        acc_scores.append(acc)
-
+    for res in ood_results:
         print(
-            f'{dataset:<25} | {sim:<10.4f} | {acc:<10.4f} | {auroc:<10.4f} | {aver_p:<10.4f} | {fpr_95:<10.4f}'
+            f'{res["name"]:<25} | {res["sim"]:<10.4f} | {res["acc"]:<10.4f} | {res["auc"]:<10.4f} | {res["ap"]:<10.4f} | {res["fpr"]:<10.4f}'
         )
+        sim_scores.append(res['sim'])
+        acc_scores.append(res['acc'])
+        auc_scores.append(res['auc'])
+        ap_scores.append(res['ap'])
+        fpr_scores.append(res['fpr'])
 
     avg_sim = np.mean(sim_scores)
     avg_acc = np.mean(acc_scores)
@@ -126,8 +178,6 @@ def print_evaluation_results(similarities, datasets):
         f'{"Average Generated":<25} | {avg_sim:<10.4f} | {avg_acc:<10.4f} | {avg_auc:<10.4f} | {avg_ap:<10.4f} | {avg_fpr:<10.4f}'
     )
     print('=' * 95)
-
-    print_legend()
 
 
 class HFImageDataset(Dataset):
@@ -151,6 +201,7 @@ class DetectorWrapper:
     def __init__(self):
         self.model = None
         self.transform = None
+        self.use_optimal_threshold = False
 
     @torch.inference_mode()
     def detect(self, data):
@@ -274,7 +325,7 @@ class C2P_CLIP_Detector(DetectorWrapper):
 
 
 class C2P_DINOv2_Detector(DetectorWrapper):
-    def __init__(self, model_path):
+    def __init__(self, model_path=None):
         super().__init__()
         self._setup_path('detector_codes/C2P-DINOv2-main')
         from model import C2P_DINOv2_Model
@@ -305,7 +356,7 @@ class C2P_DINOv2_Detector(DetectorWrapper):
 
 
 class C2P_DINOv3_Detector(DetectorWrapper):
-    def __init__(self, model_path):
+    def __init__(self, model_path=None):
         super().__init__()
         self._setup_path('detector_codes/C2P-DINOv3-main')
         from model import C2P_DINOv3_Model
@@ -558,6 +609,7 @@ class NPR_Detector(DetectorWrapper):
 class RIGID_Detector(DetectorWrapper):
     def __init__(self, model_path=None):
         super().__init__()
+        self.use_optimal_threshold = True
         self._setup_path('detector_codes/RIGID-main')
         from rigid_detector import RIGID_Detector as RIGID_Impl
 
@@ -802,7 +854,12 @@ def main():
     print('\n' + '=' * 95)
     print(f'Results for {args.model}:')
     print('=' * 95)
-    print_evaluation_results(sim_datasets, test_datasets)
+    print_evaluation_results(
+        sim_datasets,
+        test_datasets,
+        use_optimal_threshold=detector.use_optimal_threshold,
+    )
+    print_legend(use_optimal_threshold=detector.use_optimal_threshold)
 
 
 if __name__ == '__main__':
