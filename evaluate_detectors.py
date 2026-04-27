@@ -852,7 +852,7 @@ def main():
         sim_datasets.append(scores.numpy())
 
     print('\n' + '=' * 95)
-    print(f'Results for {args.model}:')
+    print(f'Results for {args.model} on {args.dataset}:')
     print('=' * 95)
     print_evaluation_results(
         sim_datasets,
