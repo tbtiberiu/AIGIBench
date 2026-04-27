@@ -282,7 +282,6 @@ class AIDE_Detector(DetectorWrapper):
 class C2P_CLIP_Detector(DetectorWrapper):
     def __init__(self, model_path):
         super().__init__()
-        self.use_optimal_threshold = True
         self._setup_path('detector_codes/C2P-CLIP-DeepfakeDetection-main')
         from networks.c2p_clip import C2P_CLIP_Model
 
@@ -319,7 +318,6 @@ class C2P_CLIP_Detector(DetectorWrapper):
 class C2P_DINOv2_Detector(DetectorWrapper):
     def __init__(self, model_path=None):
         super().__init__()
-        self.use_optimal_threshold = True
         self._setup_path('detector_codes/C2P-DINOv2-main')
         from model import C2P_DINOv2_Model
 
@@ -351,7 +349,6 @@ class C2P_DINOv2_Detector(DetectorWrapper):
 class C2P_DINOv3_Detector(DetectorWrapper):
     def __init__(self, model_path=None):
         super().__init__()
-        self.use_optimal_threshold = True
         self._setup_path('detector_codes/C2P-DINOv3-main')
         from model import C2P_DINOv3_Model
 
