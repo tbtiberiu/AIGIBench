@@ -54,32 +54,25 @@ def calculate_average_precision(id_predictions, ood_predictions):
 
 
 def calculate_accuracy(id_conf, ood_conf, use_optimal=False):
-    """Calculates accuracy either using optimal threshold or fixed 0.5 threshold.
-    Returns (total_accuracy, real_accuracy)"""
+    """Calculates class-specific accuracies.
+    Returns (real_accuracy, fake_accuracy)"""
     if use_optimal:
         all_conf = np.concatenate([id_conf, ood_conf])
         labels = np.concatenate([np.ones(len(id_conf)), np.zeros(len(ood_conf))])
 
         fpr, tpr, thresholds = metrics.roc_curve(labels, all_conf)
 
-        # Number of positive (ID) and negative (OOD) samples
-        P = len(id_conf)
-        N = len(ood_conf)
+        # We maximize the arithmetic mean of TPR (real acc) and TNR (fake acc)
+        # to find the optimal balanced threshold
+        balanced_accs = (tpr + (1 - fpr)) / 2
+        best_idx = np.argmax(balanced_accs)
 
-        # Accuracy = (TP + TN) / (P + N)
-        accuracies = (tpr * P + (1 - fpr) * N) / (P + N)
-        best_idx = np.argmax(accuracies)
-
-        return accuracies[best_idx], tpr[best_idx]
+        return tpr[best_idx], 1.0 - fpr[best_idx]
     else:
         # Use fixed 0.5 threshold
         r_acc = (id_conf >= 0.5).mean()
         f_acc = (ood_conf < 0.5).mean()
-
-        P = len(id_conf)
-        N = len(ood_conf)
-        total_acc = (r_acc * P + f_acc * N) / (P + N)
-        return total_acc, r_acc
+        return r_acc, f_acc
 
 
 def print_table_header():
@@ -97,13 +90,11 @@ def print_legend(use_optimal_threshold=False):
     )
     if use_optimal_threshold:
         print(
-            '- Accuracy: The maximum possible classification accuracy achieved by choosing an optimal threshold.'
+            '- Accuracy: The class-specific accuracy (Real accuracy for the Real row, Fake accuracy for Generator rows)'
         )
-        print('  (Calculated pairwise between Real and the specific Generated dataset)')
+        print('  using an optimal threshold calculated pairwise.')
     else:
-        print(
-            '- Accuracy: The percentage of correctly classified images using a 0.5 threshold.'
-        )
+        print('- Accuracy: The class-specific accuracy using a 0.5 threshold.')
         print(
             '  (For Real: score >= 0.5 is correct; For Generated: score < 0.5 is correct)'
         )
@@ -123,7 +114,7 @@ def print_evaluation_results(similarities, datasets, use_optimal_threshold=False
     for ood_confi, dataset_name in zip(similarities[1:], datasets[1:]):
         auroc, fpr_95 = calculate_auc_metrics(id_confi, ood_confi)
         aver_p = calculate_average_precision(id_confi, ood_confi)
-        acc, r_acc = calculate_accuracy(
+        r_acc, f_acc = calculate_accuracy(
             id_confi, ood_confi, use_optimal=use_optimal_threshold
         )
         sim = ood_confi.mean()
@@ -132,7 +123,7 @@ def print_evaluation_results(similarities, datasets, use_optimal_threshold=False
             {
                 'name': dataset_name,
                 'sim': sim,
-                'acc': acc,
+                'acc': f_acc,
                 'auc': auroc,
                 'ap': aver_p,
                 'fpr': fpr_95,
@@ -291,6 +282,7 @@ class AIDE_Detector(DetectorWrapper):
 class C2P_CLIP_Detector(DetectorWrapper):
     def __init__(self, model_path):
         super().__init__()
+        self.use_optimal_threshold = True
         self._setup_path('detector_codes/C2P-CLIP-DeepfakeDetection-main')
         from networks.c2p_clip import C2P_CLIP_Model
 
@@ -327,6 +319,7 @@ class C2P_CLIP_Detector(DetectorWrapper):
 class C2P_DINOv2_Detector(DetectorWrapper):
     def __init__(self, model_path=None):
         super().__init__()
+        self.use_optimal_threshold = True
         self._setup_path('detector_codes/C2P-DINOv2-main')
         from model import C2P_DINOv2_Model
 
@@ -358,6 +351,7 @@ class C2P_DINOv2_Detector(DetectorWrapper):
 class C2P_DINOv3_Detector(DetectorWrapper):
     def __init__(self, model_path=None):
         super().__init__()
+        self.use_optimal_threshold = True
         self._setup_path('detector_codes/C2P-DINOv3-main')
         from model import C2P_DINOv3_Model
 
@@ -837,9 +831,9 @@ def main():
 
         for i, (imgs, _) in enumerate(pbar):
             imgs = imgs.to(DEVICE)
-            # Invert: high score = real (ID-positive)
-            # Detector returns p(fake), so we take 1 - p(fake)
-            score = 1.0 - detector.detect(imgs)
+            # Detector returns p(fake), so we take 1 - p(fake) to get p(real)
+            p_fake = detector.detect(imgs)
+            score = 1.0 - p_fake
             scores.append(score.cpu())
             total += len(imgs)
             if total >= args.limit:
