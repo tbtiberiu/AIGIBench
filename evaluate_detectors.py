@@ -170,6 +170,19 @@ def print_evaluation_results(similarities, datasets, use_optimal_threshold=False
     )
     print('=' * 95)
 
+    # Summary Table
+    total_acc = (avg_id_acc + avg_acc) / 2
+    print('\nSummary:')
+    print('=' * 95)
+    print(
+        f'{"Accuracy":<12} | {"Accuracy (Real)":<18} | {"Accuracy (Gen)":<18} | {"AUC":<10} | {"AP":<10} | {"FPR95":<10}'
+    )
+    print('-' * 95)
+    print(
+        f'{total_acc:<12.4f} | {avg_id_acc:<18.4f} | {avg_acc:<18.4f} | {avg_auc:<10.4f} | {avg_ap:<10.4f} | {avg_fpr:<10.4f}'
+    )
+    print('=' * 95)
+
 
 class HFImageDataset(Dataset):
     def __init__(self, hf_data, transform=None):
@@ -703,6 +716,12 @@ def main():
     parser.add_argument(
         '--batch_size', type=int, default=16, help='Batch size for evaluation'
     )
+    parser.add_argument(
+        '--show_legend',
+        type=lambda x: (str(x).lower() == 'true'),
+        default=False,
+        help='Whether to show the legend (default: False)',
+    )
     args = parser.parse_args()
 
     dataset_configs = {
@@ -850,7 +869,8 @@ def main():
         test_datasets,
         use_optimal_threshold=detector.use_optimal_threshold,
     )
-    print_legend(use_optimal_threshold=detector.use_optimal_threshold)
+    if args.show_legend:
+        print_legend(use_optimal_threshold=detector.use_optimal_threshold)
 
 
 if __name__ == '__main__':
