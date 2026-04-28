@@ -3,6 +3,7 @@ import importlib
 import os
 import random
 import sys
+import urllib.request
 
 import numpy as np
 import torch
@@ -566,7 +567,7 @@ class GramNet_Detector(DetectorWrapper):
 class LGrad_Detector(DetectorWrapper):
     def __init__(self, model_path):
         super().__init__()
-        # LGrad weights match standard ResNet-50
+        # 1. Initialize CNN model (ResNet-50)
         self._setup_path('detector_codes/LGrad-master/CNNDetection')
         import networks.resnet as resnet_module
 
@@ -577,15 +578,83 @@ class LGrad_Detector(DetectorWrapper):
             torch.load(model_path, map_location='cpu', weights_only=False)
         )
         self.model.to(DEVICE).eval()
+
+        # 2. Initialize StyleGAN Discriminator for gradient extraction
+        self._setup_path('detector_codes/LGrad-master/img2gad_pytorch')
+        from models import build_model
+
+        self.discriminator = build_model(
+            gan_type='stylegan',
+            module='discriminator',
+            resolution=256,
+            label_size=0,
+            image_channels=3,
+        )
+
+        disc_path = 'AIGIBench_models/LGrad-master/karras2019stylegan-bedrooms-256x256_discriminator.pth'
+        if not os.path.exists(disc_path):
+            os.makedirs(os.path.dirname(disc_path), exist_ok=True)
+            print(f'Downloading LGrad discriminator weights to {disc_path}...')
+            urllib.request.urlretrieve(
+                'https://lid-1302259812.cos.ap-nanjing.myqcloud.com/tmp/karras2019stylegan-bedrooms-256x256_discriminator.pth',
+                disc_path,
+            )
+
+        self.discriminator.load_state_dict(
+            torch.load(disc_path, map_location='cpu', weights_only=False), strict=True
+        )
+        self.discriminator.to(DEVICE).eval()
+
+        # 3. Setup transforms
         self.transform = transforms.Compose(
             [
                 transforms.Resize((256, 256)),
                 transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
             ]
         )
+        self.transform_disc = transforms.Normalize(
+            mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+        )
+        self.transform_resnet = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        )
+
+    def detect(self, data):
+        # data is [B, 3, 256, 256] in range [0, 1]
+        disc_input = self.transform_disc(data)
+        disc_input.requires_grad = True
+
+        with torch.enable_grad():
+            pre = self.discriminator(disc_input)
+            grad = torch.autograd.grad(
+                pre.sum(),
+                disc_input,
+                create_graph=False,
+                retain_graph=False,
+                allow_unused=False,
+            )[0]
+
+        # Normalize gradients per image to [0, 1]
+        # grad is [B, 3, 256, 256]
+        b, c, h, w = grad.shape
+        grad_flat = grad.view(b, -1)
+        grad_min = grad_flat.min(dim=1, keepdim=True)[0].view(b, 1, 1, 1)
+        grad_norm = grad - grad_min
+        grad_flat_norm = grad_norm.view(b, -1)
+        grad_max = grad_flat_norm.max(dim=1, keepdim=True)[0].view(b, 1, 1, 1)
+
+        # Scale to [0, 1]
+        grad_norm = torch.where(grad_max != 0, grad_norm / grad_max, grad_norm)
+
+        # Apply ResNet normalization
+        resnet_input = self.transform_resnet(grad_norm)
+
+        with torch.no_grad():
+            out = self.model(resnet_input)
+            if out.shape[1] == 1:
+                return out.sigmoid().flatten()
+            else:
+                return out.softmax(dim=1)[:, 1].flatten()
 
 
 class LaDeDa_Detector(DetectorWrapper):
