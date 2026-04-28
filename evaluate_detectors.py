@@ -588,6 +588,37 @@ class LGrad_Detector(DetectorWrapper):
         )
 
 
+class LaDeDa_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        super().__init__()
+        self._setup_path(
+            'detector_codes/RealTime-DeepfakeDetection-in-the-RealWorld-main'
+        )
+        from networks.LaDeDa import LaDeDa9
+
+        self.model = LaDeDa9(num_classes=1)
+        self.model.fc = torch.nn.Linear(2048, 1)
+
+        from collections import OrderedDict
+        from copy import deepcopy
+
+        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+        pretrained_dict = OrderedDict()
+        for ki in state_dict.keys():
+            pretrained_dict[ki] = deepcopy(state_dict[ki])
+        self.model.load_state_dict(pretrained_dict, strict=True)
+        self.model.to(DEVICE).eval()
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((256, 256)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+
+
 class NPR_Detector(DetectorWrapper):
     def __init__(self, model_path):
         super().__init__()
@@ -696,6 +727,7 @@ def main():
             'Effort',
             'FreqNet',
             'GramNet',
+            'LaDeDa',
             'LGrad',
             'NPR',
             'RIGID',
@@ -718,7 +750,7 @@ def main():
     )
     parser.add_argument(
         '--show_legend',
-        type=lambda x: (str(x).lower() == 'true'),
+        type=lambda x: str(x).lower() == 'true',
         default=False,
         help='Whether to show the legend (default: False)',
     )
@@ -768,6 +800,7 @@ def main():
         'Effort': './AIGIBench_models/Effort-AIGI-Detection/model_epoch_best.pth',
         'FreqNet': './AIGIBench_models/FreqNet-DeepfakeDetection-main/model_epoch_best.pth',
         'GramNet': './AIGIBench_models/Gram-Net-main/model_epoch_best.pth',
+        'LaDeDa': './AIGIBench_models/RealTime-DeepfakeDetection-in-the-RealWorld-main/model_epoch_best.pth',
         'LGrad': './AIGIBench_models/LGrad-master/model_epoch_best.pth',
         'NPR': './AIGIBench_models/NPR-DeepfakeDetection-main/model_epoch_best.pth',
         'RIGID': None,
@@ -786,6 +819,7 @@ def main():
         'Effort': Effort_Detector,
         'FreqNet': FreqNet_Detector,
         'GramNet': GramNet_Detector,
+        'LaDeDa': LaDeDa_Detector,
         'LGrad': LGrad_Detector,
         'NPR': NPR_Detector,
         'RIGID': RIGID_Detector,
