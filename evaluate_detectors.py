@@ -360,6 +360,56 @@ class C2P_DINOv2_Detector(DetectorWrapper):
         return self.model.detect(img)
 
 
+class CLIPDetection_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        super().__init__()
+        self._setup_path('detector_codes/CLIPDetection-main')
+        # CLIPDetection uses openai-clip. We need to handle its specific architecture.
+        # This implementation assumes dependencies are installed.
+        from models.clip_models import CLIPModel
+
+        self.model = CLIPModel(name='ViT-L/14', num_classes=1)
+        self.model.load_state_dict(
+            torch.load(model_path, map_location='cpu', weights_only=False)
+        )
+        self.model.to(DEVICE).eval()
+        # CLIP standard normalization
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=(0.48145466, 0.4578275, 0.40821073),
+                    std=(0.26862954, 0.26130258, 0.27577711),
+                ),
+            ]
+        )
+
+
+class CNNDetection_Detector(DetectorWrapper):
+    def __init__(self, model_path):
+        super().__init__()
+        self._setup_path('detector_codes/CNNDetection-master')
+        from networks.resnet import resnet50
+
+        self.model = resnet50(num_classes=1)
+        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
+        self.model.load_state_dict(
+            state_dict['model'] if 'model' in state_dict else state_dict
+        )
+        self.model.to(DEVICE).eval()
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize((256, 256)),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+
+
 class DeForge_AI_Detector(DetectorWrapper):
     def __init__(self, model_path=None):
         super().__init__()
@@ -416,56 +466,6 @@ class DeForge_AI_Detector(DetectorWrapper):
 
     def detect(self, img):
         return self.model.detect(img)
-
-
-class CLIPDetection_Detector(DetectorWrapper):
-    def __init__(self, model_path):
-        super().__init__()
-        self._setup_path('detector_codes/CLIPDetection-main')
-        # CLIPDetection uses openai-clip. We need to handle its specific architecture.
-        # This implementation assumes dependencies are installed.
-        from models.clip_models import CLIPModel
-
-        self.model = CLIPModel(name='ViT-L/14', num_classes=1)
-        self.model.load_state_dict(
-            torch.load(model_path, map_location='cpu', weights_only=False)
-        )
-        self.model.to(DEVICE).eval()
-        # CLIP standard normalization
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=(0.48145466, 0.4578275, 0.40821073),
-                    std=(0.26862954, 0.26130258, 0.27577711),
-                ),
-            ]
-        )
-
-
-class CNNDetection_Detector(DetectorWrapper):
-    def __init__(self, model_path):
-        super().__init__()
-        self._setup_path('detector_codes/CNNDetection-master')
-        from networks.resnet import resnet50
-
-        self.model = resnet50(num_classes=1)
-        state_dict = torch.load(model_path, map_location='cpu', weights_only=False)
-        self.model.load_state_dict(
-            state_dict['model'] if 'model' in state_dict else state_dict
-        )
-        self.model.to(DEVICE).eval()
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize((256, 256)),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        )
 
 
 class DFFreq_Detector(DetectorWrapper):
@@ -789,9 +789,9 @@ def main():
             'AIDE',
             'C2P-CLIP',
             'C2P-DINOv2',
-            'DeForge-AI',
             'CLIPDetection',
             'CNNDetection',
+            'DeForge-AI',
             'DFFreq',
             'Effort',
             'FreqNet',
@@ -862,9 +862,9 @@ def main():
         'AIDE': './AIGIBench_models/AIDE-main/model_epoch_best.pth',
         'C2P-CLIP': './AIGIBench_models/C2P-CLIP-DeepfakeDetection-main/model_epoch_best.pth',
         'C2P-DINOv2': './AIGIBench_models/C2P-DINOv2-main/model_epoch_best.pth',
-        'DeForge-AI': './AIGIBench_models/DeForge-AI-main/model_epoch_best.pth',
         'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
+        'DeForge-AI': './AIGIBench_models/DeForge-AI-main/model_epoch_best.pth',
         'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_best.pth',
         'Effort': './AIGIBench_models/Effort-AIGI-Detection/model_epoch_best.pth',
         'FreqNet': './AIGIBench_models/FreqNet-DeepfakeDetection-main/model_epoch_best.pth',
@@ -881,9 +881,9 @@ def main():
         'AIDE': AIDE_Detector,
         'C2P-CLIP': C2P_CLIP_Detector,
         'C2P-DINOv2': C2P_DINOv2_Detector,
-        'DeForge-AI': DeForge_AI_Detector,
         'CLIPDetection': CLIPDetection_Detector,
         'CNNDetection': CNNDetection_Detector,
+        'DeForge-AI': DeForge_AI_Detector,
         'DFFreq': DFFreq_Detector,
         'Effort': Effort_Detector,
         'FreqNet': FreqNet_Detector,
