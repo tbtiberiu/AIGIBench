@@ -360,11 +360,11 @@ class C2P_DINOv2_Detector(DetectorWrapper):
         return self.model.detect(img)
 
 
-class C2P_DINOv3_Detector(DetectorWrapper):
+class DeForge_AI_Detector(DetectorWrapper):
     def __init__(self, model_path=None):
         super().__init__()
-        self._setup_path('detector_codes/C2P-DINOv3-main')
-        from model import C2P_DINOv3_Model
+        self._setup_path('detector_codes/DeForge-AI-main')
+        from model import DeForge_AI_Model
 
         checkpoint = None
         checkpoint_args = {}
@@ -391,7 +391,7 @@ class C2P_DINOv3_Detector(DetectorWrapper):
         elif lora_target_modules:
             model_kwargs['lora_target_modules'] = lora_target_modules
 
-        self.model = C2P_DINOv3_Model(**model_kwargs)
+        self.model = DeForge_AI_Model(**model_kwargs)
         if checkpoint is not None:
             self.model.load_state_dict(
                 checkpoint['model_state_dict']
@@ -789,7 +789,7 @@ def main():
             'AIDE',
             'C2P-CLIP',
             'C2P-DINOv2',
-            'C2P-DINOv3',
+            'DeForge-AI',
             'CLIPDetection',
             'CNNDetection',
             'DFFreq',
@@ -862,7 +862,7 @@ def main():
         'AIDE': './AIGIBench_models/AIDE-main/model_epoch_best.pth',
         'C2P-CLIP': './AIGIBench_models/C2P-CLIP-DeepfakeDetection-main/model_epoch_best.pth',
         'C2P-DINOv2': './AIGIBench_models/C2P-DINOv2-main/model_epoch_best.pth',
-        'C2P-DINOv3': './AIGIBench_models/C2P-DINOv3-main/model_epoch_best.pth',
+        'DeForge-AI': './AIGIBench_models/DeForge-AI-main/model_epoch_best.pth',
         'CLIPDetection': './AIGIBench_models/CLIPDetection-main/model_epoch_best.pth',
         'CNNDetection': './AIGIBench_models/CNNDetection-master/model_epoch_best.pth',
         'DFFreq': './AIGIBench_models/DFFreq-main/model_epoch_best.pth',
@@ -881,7 +881,7 @@ def main():
         'AIDE': AIDE_Detector,
         'C2P-CLIP': C2P_CLIP_Detector,
         'C2P-DINOv2': C2P_DINOv2_Detector,
-        'C2P-DINOv3': C2P_DINOv3_Detector,
+        'DeForge-AI': DeForge_AI_Detector,
         'CLIPDetection': CLIPDetection_Detector,
         'CNNDetection': CNNDetection_Detector,
         'DFFreq': DFFreq_Detector,

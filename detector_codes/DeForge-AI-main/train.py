@@ -10,7 +10,7 @@ import torch.optim as optim
 from dataset import AIGIBenchDataset, get_train_transforms, get_val_transforms
 from datasets import load_dataset
 from dotenv import load_dotenv
-from model import C2P_DINOv3_Model
+from model import DeForge_AI_Model
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -32,7 +32,7 @@ def seed_everything(seed=123):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Train C2P DINOv3 Model')
+    parser = argparse.ArgumentParser(description='Train DeForge-AI Model')
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--backbone-lr-scale', type=float, default=0.25)
     parser.add_argument('--weight-decay', type=float, default=0.01)
@@ -223,7 +223,7 @@ def train():
             pin_memory=device.type == 'cuda',
         )
 
-    model = C2P_DINOv3_Model(
+    model = DeForge_AI_Model(
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
@@ -335,9 +335,9 @@ def train():
             metrics = run_validation(model, val_loader, criterion, device, epoch)
 
         checkpoint_name = (
-            f'dinov3_epoch_{epoch}_bacc_{metrics["val_balanced_acc"]:.4f}.pth'
+            f'deforge_ai_epoch_{epoch}_bacc_{metrics["val_balanced_acc"]:.4f}.pth'
             if metrics
-            else f'dinov3_epoch_{epoch}_step_{global_step}.pth'
+            else f'deforge_ai_epoch_{epoch}_step_{global_step}.pth'
         )
         checkpoint_path = os.path.join(checkpoints_dir, checkpoint_name)
         save_checkpoint(
