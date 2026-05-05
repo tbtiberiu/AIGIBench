@@ -24,8 +24,8 @@ class AttentionPooling(nn.Module):
         return torch.matmul(attention, value).squeeze(1)
 
 
-class NPRBranch(nn.Module):
-    """Noise Pattern Residual — captures high-frequency artifacts, initialized with SRM filters."""
+class ForensicBranch(nn.Module):
+    """Forensic Branch — captures high-frequency artifacts, initialized with SRM filters."""
 
     def __init__(self, out_dim=256):
         super().__init__()
@@ -183,7 +183,7 @@ class DeForge_AI_Model(nn.Module):
             nn.GELU(),
             nn.Dropout(0.1),
         )
-        self.forensic_branch = NPRBranch(out_dim=forensic_dim)
+        self.forensic_branch = ForensicBranch(out_dim=forensic_dim)
         self.forensic_gate = nn.Parameter(torch.tensor(0.3))
         self.head = nn.Sequential(
             nn.Linear(hidden_size + forensic_dim, 512),
