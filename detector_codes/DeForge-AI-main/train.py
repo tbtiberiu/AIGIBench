@@ -7,12 +7,13 @@ from contextlib import nullcontext
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from dataset import AIGIBenchDataset, get_train_transforms, get_val_transforms
 from datasets import load_dataset
 from dotenv import load_dotenv
-from model import DeForge_AI_Model
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from dataset import AIGIBenchDataset, get_train_transforms, get_val_transforms
+from model import DeForge_AI_Model
 
 # Add current directory to sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))

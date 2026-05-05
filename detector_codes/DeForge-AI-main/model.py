@@ -177,7 +177,7 @@ class DeForge_AI_Model(nn.Module):
 
         hidden_size = self.backbone.config.hidden_size
         self.attn_pool = AttentionPooling(hidden_size)
-        self.rgb_proj = nn.Sequential(
+        self.semantic_proj = nn.Sequential(
             nn.Linear(hidden_size * 2, hidden_size),
             nn.LayerNorm(hidden_size),
             nn.GELU(),
@@ -226,10 +226,14 @@ class DeForge_AI_Model(nn.Module):
         patch_tokens = last_hidden_state[:, 1:, :]
 
         token_features = self.attn_pool(patch_tokens)
-        rgb_features = self.rgb_proj(torch.cat([cls_token, token_features], dim=1))
+        semantic_features = self.semantic_proj(
+            torch.cat([cls_token, token_features], dim=1)
+        )
         forensic_features = self.forensic_branch(x)
         return self.head(
-            torch.cat([rgb_features, self.forensic_gate * forensic_features], dim=1)
+            torch.cat(
+                [semantic_features, self.forensic_gate * forensic_features], dim=1
+            )
         )
 
     def detect(self, x):
